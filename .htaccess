@@ -1,0 +1,20 @@
+# Fallback for hosts where the domain's document root cannot be set to public/
+# (preferred: point the document root at public/ and this file is never used).
+#
+# Every request is served from public/, so the application's source, docs,
+# storage and dotfiles in this folder can never be listed or downloaded.
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Already inside public/: let public/.htaccess handle it.
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Without mod_rewrite nothing in this folder is served.
+<IfModule !mod_rewrite.c>
+    Require all denied
+</IfModule>

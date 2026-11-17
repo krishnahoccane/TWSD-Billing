@@ -12,6 +12,34 @@ always used, so they must be configured before go-live.
 - An SMTP/API mail provider (D-13) for password resets and notification e-mail
 - Node.js 20+ on the build machine only
 
+## Shared hosting (cPanel Git Version Control)
+
+`vendor/` is not in git and cPanel usually has no Node.js, so:
+
+- `public/build` (compiled CSS/JS) **is committed**. Run `npm run build` and commit before every push that changes views or CSS.
+- After each pull, run Composer on the server (cPanel → Terminal):
+
+  ```bash
+  cd ~/<repository folder>
+  composer install --no-dev --optimize-autoloader
+  ```
+
+- **Document root**: cPanel → Domains → the domain → set the document root to `<repository folder>/public`.
+  If that is not possible, the repository's root `.htaccess` forwards every request into `public/` and blocks
+  directory listings, so source files, docs and storage can never be downloaded.
+- **PHP**: cPanel → MultiPHP Manager → PHP 8.2 or 8.3 for the domain; Select PHP Version / PHP extensions →
+  enable `pdo_mysql`, `bcmath`, `intl`, `mbstring`, `fileinfo`, `curl`, `zip`, `sodium`.
+- **Permissions**: `storage/` and `bootstrap/cache/` writable by your cPanel user (755 folders / 644 files is usual
+  on suPHP/LSAPI hosts).
+- **Cron** (cPanel → Cron Jobs; no Supervisor on shared hosting):
+
+  ```
+  * * * * * cd ~/<repository folder> && php artisan schedule:run >> /dev/null 2>&1
+  * * * * * cd ~/<repository folder> && php artisan queue:work --queue=google,zoho,billing,notifications,default --stop-when-empty --max-time=55 >> /dev/null 2>&1
+  ```
+
+Then open `https://<domain>/install`.
+
 ## First deployment — web installer
 
 ```bash

@@ -22,7 +22,7 @@ php artisan test                      # full suite — must be green before a ph
 php artisan migrate:fresh --seed      # schema + roles/permissions (no users are seeded)
 php artisan wcc:create-super-admin    # first Super Admin (interactive password)
 php artisan db:seed --class=LocalDevelopmentSeeder   # fictional demo data, local env only, needs WCC_DEV_PASSWORD
-npm run build                         # or: npm run dev
+npm run build                         # public/build IS committed (cPanel has no Node) — rebuild and commit after view/CSS changes
 php artisan queue:work --queue=google,zoho,billing,notifications,default   # integrations, billing, notifications are queued
 vendor/bin/pint                       # code style
 ```
