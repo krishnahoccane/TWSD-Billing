@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureTwoFactorEnrolled;
 use App\Http\Middleware\SecurityHeaders;
 use App\Modules\Installer\Http\Middleware\InstallationGate;
+use App\Modules\Notifications\Support\MailFailure;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Context;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -38,6 +40,25 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // E-mail that could not be sent (SMTP refused, wrong credentials, port
+        // blocked by the host...) is reported in the log and shown on the page
+        // with the server's reason, instead of a bare 500.
+        $exceptions->render(function (TransportExceptionInterface $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson() || $request->isMethod('GET')) {
+                return null;
+            }
+
+            report($e);
+
+            // Mail-server details are for signed-in users only (e.g. an admin sending a link).
+            $message = $request->user() !== null
+                ? MailFailure::describe($e)
+                : 'The e-mail could not be sent right now. Please try again later or contact your administrator.';
+
+            return back()->withInput($request->except(['password', 'password_confirmation', 'current_password']))
+                ->with('error', $message);
+        });
 
         // Consistent API error envelope: { message, errors?, request_id }.
         $exceptions->respond(function ($response, Throwable $e, Request $request) {

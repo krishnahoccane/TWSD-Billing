@@ -3,6 +3,9 @@
     @if (session('status'))
         <x-ui.alert tone="success" class="mb-4">{{ session('status') }}</x-ui.alert>
     @endif
+    @if (session('error'))
+        <x-ui.alert tone="danger" class="mb-4">{{ session('error') }}</x-ui.alert>
+    @endif
 
     <form method="POST" action="{{ route('password.email') }}" class="space-y-4">
         @csrf

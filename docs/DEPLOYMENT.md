@@ -46,6 +46,10 @@ always used, so they must be configured before go-live.
 
 Then open `https://<domain>/install`.
 
+**Mail check**: `php artisan wcc:mail-test you@example.com` sends one e-mail with the current `.env` and prints the
+mail server's exact answer (blocked port, wrong SMTP key, unverified sender). After changing `.env`, run
+`php artisan config:clear` (or `php artisan optimize`) so the new values are used.
+
 ## First deployment — web installer
 
 ```bash

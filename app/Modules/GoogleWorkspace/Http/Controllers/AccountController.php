@@ -4,6 +4,7 @@ namespace App\Modules\GoogleWorkspace\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\AccessControl\Enums\Ability;
+use App\Modules\GoogleWorkspace\Enums\AccountStatus;
 use App\Modules\GoogleWorkspace\Http\Requests\StoreAccountRequest;
 use App\Modules\GoogleWorkspace\Http\Requests\UpdateAccountRequest;
 use App\Modules\GoogleWorkspace\Models\AccountDeletionRequest;
@@ -156,16 +157,28 @@ class AccountController extends Controller
     {
         Gate::authorize('reassign', $account);
 
-        $data = $request->validate(['organisation' => ['required', 'uuid']]);
+        $transfer = ! $account->isUnassigned();
 
+        // Moving a mailbox away from an organisation needs a reason (audited).
+        $data = $request->validateWithBag($transfer ? 'reassign' : 'default', [
+            'organisation' => ['required', 'uuid'],
+            'reason' => [$transfer ? 'required' : 'nullable', 'string', 'min:3', 'max:500'],
+        ]);
+
+        // Resolved inside the caller's own scope for this ability; anything else is a 404.
         $organisation = Organisation::query()
             ->visibleTo($request->user(), Ability::AccountsReassignOrganisation)
             ->where('uuid', $data['organisation'])
             ->firstOrFail();
 
-        $accounts->assignOrganisation($account, $organisation, $request->user());
+        if ($organisation->getKey() === $account->organisation_id) {
+            return back()->withErrors(['organisation' => 'The mailbox already belongs to this organisation.'], $transfer ? 'reassign' : 'default');
+        }
 
-        return back()->with('success', "{$account->primary_email} now belongs to {$organisation->name}.");
+        $accounts->assignOrganisation($account, $organisation, $request->user(), $data['reason'] ?? null);
+
+        return back()->with('success', "{$account->primary_email} now belongs to {$organisation->name}."
+            .($transfer ? ' It is billed to the new organisation from today.' : ''));
     }
 
     public function requestPermanentDeletion(Request $request, GoogleAccount $account, GoogleAccountService $accounts): RedirectResponse
@@ -220,8 +233,11 @@ class AccountController extends Controller
             'deletionRequest' => $accounts->openDeletionRequest($account)?->load('requester:id,name,email'),
             'canReveal' => $password === null && $vault->isAvailableTo($account, $request->user()),
             'initialPassword' => $password,
-            'assignable' => $account->isUnassigned() && $request->user()->can('reassign', $account)
-                ? Organisation::query()->visibleTo($request->user(), Ability::AccountsReassignOrganisation)->orderBy('name')->pluck('name', 'uuid')->all()
+            // Organisations the mailbox can be assigned or moved to (not its current one).
+            'assignable' => $request->user()->can('reassign', $account) && $account->account_status !== AccountStatus::PermanentlyDeleted
+                ? Organisation::query()->visibleTo($request->user(), Ability::AccountsReassignOrganisation)
+                    ->when($account->organisation_id, fn ($query, $id) => $query->whereKeyNot($id))
+                    ->orderBy('name')->pluck('name', 'uuid')->all()
                 : [],
         ]);
     }

@@ -293,13 +293,20 @@ class GoogleAccountService
      * The ONLY way an account's organisation changes. Used for the
      * Unassigned Accounts queue and for explicit transfers.
      */
-    public function assignOrganisation(GoogleAccount $account, Organisation $organisation, User $actor): void
+    public function assignOrganisation(GoogleAccount $account, Organisation $organisation, User $actor, ?string $reason = null): void
     {
         if ($account->organisation_id === $organisation->getKey()) {
             return;
         }
 
-        DB::transaction(function () use ($account, $organisation, $actor) {
+        // A transfer while a Google operation is in flight would bill or audit the wrong organisation.
+        if ($account->organisation_id !== null && $account->pending_operation !== null) {
+            throw ValidationException::withMessages([
+                'organisation' => 'A Google Workspace change is still being applied to this mailbox. Try again when it has finished.',
+            ]);
+        }
+
+        DB::transaction(function () use ($account, $organisation, $actor, $reason) {
             $previous = $account->organisation;
             $domainName = Str::after($account->primary_email, '@');
 
@@ -323,12 +330,26 @@ class GoogleAccountService
                 app(BillingPeriodTracker::class)->open($account, $account->billable_from);
             }
 
-            $details = ['from' => $previous?->uuid, 'to' => $organisation->uuid, 'billable_from' => $account->billable_from?->toDateString()];
+            $details = array_filter([
+                'from' => $previous?->uuid,
+                'to' => $organisation->uuid,
+                'billable_from' => $account->billable_from?->toDateString(),
+                'reason' => $reason,
+            ], fn ($value) => $value !== null);
 
-            $this->history->record($account, 'organisation_assigned', details: $details, actor: $actor);
-            $this->audit->record('account.organisation_assigned', $account,
-                previous: ['organisation' => $previous?->uuid], new: ['organisation' => $organisation->uuid],
+            $event = $previous === null ? 'organisation_assigned' : 'organisation_reassigned';
+
+            $this->history->record($account, $event, details: $details, actor: $actor);
+            $this->audit->record('account.'.$event, $account,
+                previous: ['organisation' => $previous?->uuid], new: array_filter(['organisation' => $organisation->uuid, 'reason' => $reason]),
                 organisation: $organisation, actor: $actor);
+
+            // The previous organisation sees the move in its own audit trail too.
+            if ($previous !== null) {
+                $this->audit->record('account.organisation_reassigned', $account,
+                    previous: ['organisation' => $previous->uuid], new: array_filter(['organisation' => $organisation->uuid, 'reason' => $reason]),
+                    organisation: $previous, actor: $actor);
+            }
         });
     }
 

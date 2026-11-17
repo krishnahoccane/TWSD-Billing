@@ -447,6 +447,19 @@ made Alpine transitions look broken during the check; they work when the pane is
 - Not verified against live Google: the alias flattening follows the Directory API reference (Domains resource,
   DomainAlias fields `domainAliasName`, `parentDomainName`, `verified`).
 
+## Mailbox transfer and mail errors (2026-11-18)
+
+- **Change organisation** on a mailbox that already belongs to an organisation (Super Admin,
+  `accounts.reassign_organisation`): reason required, refused while a Google operation is in flight, billing period
+  of the old organisation closed the day before and a new one opened from today, audited
+  `account.organisation_reassigned` in both organisations, history event `organisation_reassigned`.
+  Nothing changes in Google. Same endpoint as Unassigned assignment (`accounts.assign`).
+- **SMTP failures are no longer a 500**: a `TransportExceptionInterface` on a web POST is logged and the page shows
+  why (`Notifications/Support/MailFailure`: unreachable server / rejected credentials / unverified sender / TLS);
+  guests get a generic message without server details. SMTP timeout 20 s (`MAIL_TIMEOUT`).
+- `php artisan wcc:mail-test you@example.com` sends one test e-mail and prints the mail server's answer.
+- Tests: `GoogleWorkspace/AccountReassignTest` (4, including tenancy), `Auth/MailFailureTest` (5).
+
 ## Project status
 
 All seven phases are built. Remaining work before production is configuration and the first live tests: mail

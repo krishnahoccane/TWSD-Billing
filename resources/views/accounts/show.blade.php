@@ -14,6 +14,8 @@
         'retry' => $status === AccountStatus::CreationFailed && $user->can('update', $account),
         'requestPermanent' => $idle && $status === AccountStatus::SoftDeleted && $deletionRequest === null && $user->can('requestPermanentDeletion', $account),
         'decidePermanent' => $deletionRequest?->status === 'pending' && $user->can('approvePermanentDeletion', $account),
+        // Move an already-assigned mailbox to another organisation.
+        'reassign' => $idle && ! $account->isUnassigned() && $assignable !== [],
     ];
 
     $details = [
@@ -36,6 +38,9 @@
         @if ($can['edit'])
             <x-ui.button variant="secondary" icon="pencil" :href="route('accounts.edit', $account)">Edit</x-ui.button>
         @endif
+        @if ($can['reassign'])
+            <x-ui.button variant="secondary" icon="building-2" @click="$dispatch('open-modal', 'reassign')">Change organisation</x-ui.button>
+        @endif
         @if ($can['suspend'])
             <x-ui.button variant="secondary" icon="pause-circle" @click="$dispatch('open-modal', 'suspend')">Suspend</x-ui.button>
         @endif
@@ -51,8 +56,8 @@
     </x-slot:actions>
 
     <div class="space-y-4">
-        @if ($errors->has('account') || $errors->has('request') || $errors->has('confirm_email') || $errors->has('reason'))
-            <x-ui.alert tone="danger">{{ $errors->first('account') ?: $errors->first('request') ?: $errors->first('confirm_email') ?: $errors->first('reason') }}</x-ui.alert>
+        @if ($errors->has('account') || $errors->has('request') || $errors->has('confirm_email') || $errors->has('reason') || $errors->has('organisation'))
+            <x-ui.alert tone="danger">{{ $errors->first('account') ?: $errors->first('request') ?: $errors->first('confirm_email') ?: $errors->first('reason') ?: $errors->first('organisation') }}</x-ui.alert>
         @endif
 
         @if ($initialPassword !== null)
@@ -187,6 +192,27 @@
             The password is shown one time and then removed from this system. Make sure nobody else can see your screen.
         </x-ui.confirm-modal>
     @endif
+    @if ($can['reassign'])
+        <x-ui.modal name="reassign" title="Move this mailbox to another organisation?">
+            <form method="POST" action="{{ route('accounts.assign', $account) }}" class="space-y-4">
+                @csrf
+                <div class="space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+                    <p>{{ $account->primary_email }} currently belongs to <span class="font-medium">{{ $account->organisation->name }}</span>.</p>
+                    <p>{{ $account->organisation->name }} is billed up to yesterday and the new organisation from today. Nothing changes in Google Workspace.</p>
+                </div>
+                <x-ui.form.field label="New organisation" for="reassign_organisation" name="organisation" bag="reassign" required>
+                    <x-ui.form.select name="organisation" id="reassign_organisation" :options="$assignable" placeholder="Choose…" bag="reassign" required />
+                </x-ui.form.field>
+                <x-ui.form.field label="Reason" for="reassign_reason" name="reason" bag="reassign" required>
+                    <x-ui.form.textarea name="reason" id="reassign_reason" required minlength="3" maxlength="500" />
+                </x-ui.form.field>
+                <div class="flex justify-end gap-2">
+                    <x-ui.button variant="secondary" @click="$dispatch('close-modal', 'reassign')">Cancel</x-ui.button>
+                    <x-ui.button type="submit">Move mailbox</x-ui.button>
+                </div>
+            </form>
+        </x-ui.modal>
+    @endif
     @if ($can['suspend'])
         <x-ui.confirm-modal name="suspend" title="Suspend this mailbox?" :action="route('accounts.suspend', $account)" confirm-label="Suspend" danger require-reason>
             {{ $account->primary_email }} will be unable to sign in and active sessions are signed out. Mail and data are kept.
@@ -274,6 +300,9 @@
         </x-ui.confirm-modal>
     @endif
 
+    @if ($can['reassign'] && $errors->getBag('reassign')->any())
+        <div x-data x-init="$nextTick(() => $dispatch('open-modal', 'reassign'))"></div>
+    @endif
     @if ($errors->getBag('permanent')->any())
         <div x-data x-init="$nextTick(() => $dispatch('open-modal', 'request-permanent'))"></div>
     @endif
