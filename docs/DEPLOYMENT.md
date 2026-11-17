@@ -31,12 +31,18 @@ always used, so they must be configured before go-live.
   enable `pdo_mysql`, `bcmath`, `intl`, `mbstring`, `fileinfo`, `curl`, `zip`, `sodium`.
 - **Permissions**: `storage/` and `bootstrap/cache/` writable by your cPanel user (755 folders / 644 files is usual
   on suPHP/LSAPI hosts).
-- **Cron** (cPanel → Cron Jobs; no Supervisor on shared hosting):
+- **Cron** (cPanel → Cron Jobs; no Supervisor on shared hosting). **Without these, nothing queued ever runs** —
+  Google sync, mailbox changes, Zoho, billing and e-mail all stay "pending". Use the full path of the PHP CLI that
+  matches the site's version (cron's plain `php` is often an older version; check with `ls /opt/cpanel/ea-php8*/root/usr/bin/php`
+  or `which php` in Terminal):
 
   ```
-  * * * * * cd ~/<repository folder> && php artisan schedule:run >> /dev/null 2>&1
-  * * * * * cd ~/<repository folder> && php artisan queue:work --queue=google,zoho,billing,notifications,default --stop-when-empty --max-time=55 >> /dev/null 2>&1
+  * * * * * cd /home/<user>/<repository folder> && /opt/cpanel/ea-php83/root/usr/bin/php artisan schedule:run >> storage/logs/cron.log 2>&1
+  * * * * * cd /home/<user>/<repository folder> && /opt/cpanel/ea-php83/root/usr/bin/php artisan queue:work --queue=google,zoho,billing,notifications,default --stop-when-empty --max-time=55 >> storage/logs/worker.log 2>&1
   ```
+
+  A long job (e.g. a full directory import) keeps running past 55 s; the queue's `retry_after` (660 s) stops the
+  next minute's worker from picking up the same job.
 
 Then open `https://<domain>/install`.
 
