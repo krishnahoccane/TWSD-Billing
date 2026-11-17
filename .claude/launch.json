@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wcc",
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["artisan", "serve", "--port=8000"],
+      "port": 8000
+    },
+    {
+      "name": "wcc-demo-sqlite",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set APP_ENV=local&& set APP_DEBUG=true&& set APP_KEY=base64:koTtCqn5WGl02rNTkZ0wN3C1e1GZ0pqZvZynIjUMKyI=&& set APP_URL=http://localhost:8001&& set DB_CONNECTION=sqlite&& set DB_DATABASE=database/database.sqlite&& set SESSION_DRIVER=file&& set CACHE_STORE=file&& set QUEUE_CONNECTION=sync&& set MAIL_MAILER=log&& set WCC_ENFORCE_2FA=false&& php artisan serve --port=8001"],
+      "port": 8001
+    }
+  ]
+}
