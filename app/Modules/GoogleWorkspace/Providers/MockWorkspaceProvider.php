@@ -69,9 +69,9 @@ class MockWorkspaceProvider implements WorkspaceProviderInterface
         return count(array_filter($this->calls, fn (array $call) => $call['operation'] === $operation));
     }
 
-    public function seedDomain(string $name, bool $isPrimary = false, bool $verified = true): void
+    public function seedDomain(string $name, bool $isPrimary = false, bool $verified = true, ?string $aliasOf = null): void
     {
-        $this->domains[strtolower($name)] = ['isPrimary' => $isPrimary, 'verified' => $verified];
+        $this->domains[strtolower($name)] = ['isPrimary' => $isPrimary, 'verified' => $verified, 'aliasOf' => $aliasOf === null ? null : strtolower($aliasOf)];
         $this->save();
     }
 
@@ -242,7 +242,7 @@ class MockWorkspaceProvider implements WorkspaceProviderInterface
         $this->called('domains.list');
 
         return array_map(
-            fn (string $name) => new WorkspaceDomain($name, $this->domains[$name]['isPrimary'], $this->domains[$name]['verified']),
+            fn (string $name) => new WorkspaceDomain($name, $this->domains[$name]['isPrimary'], $this->domains[$name]['verified'], $this->domains[$name]['aliasOf'] ?? null),
             array_keys($this->domains),
         );
     }

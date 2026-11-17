@@ -136,7 +136,23 @@ class GoogleWorkspaceProvider implements WorkspaceProviderInterface
     {
         $data = $this->send('GET', '/customer/'.rawurlencode($this->customerId).'/domains');
 
-        return array_map($this->domain(...), $data['domains'] ?? []);
+        $domains = [];
+
+        foreach ($data['domains'] ?? [] as $item) {
+            $domains[] = $this->domain($item);
+
+            // Domain aliases are nested in their parent domain (domainAliases[]).
+            foreach ($item['domainAliases'] ?? [] as $alias) {
+                $domains[] = new WorkspaceDomain(
+                    strtolower((string) $alias['domainAliasName']),
+                    false,
+                    (bool) ($alias['verified'] ?? false),
+                    strtolower((string) ($alias['parentDomainName'] ?? $item['domainName'])),
+                );
+            }
+        }
+
+        return $domains;
     }
 
     public function getDomain(string $domainName): ?WorkspaceDomain

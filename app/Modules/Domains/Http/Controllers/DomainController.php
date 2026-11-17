@@ -3,13 +3,17 @@
 namespace App\Modules\Domains\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Modules\AccessControl\Enums\Ability;
 use App\Modules\Domains\Enums\DomainRequestStatus;
 use App\Modules\Domains\Models\DomainHistory;
 use App\Modules\Domains\Models\DomainRequest;
+use App\Modules\Domains\Models\GoogleDomain;
 use App\Modules\Domains\Models\OrganisationDomain;
 use App\Modules\Domains\Services\DomainMappingService;
 use App\Modules\Domains\Services\DomainRequestService;
+use App\Modules\GoogleWorkspace\Models\GoogleSyncLog;
+use App\Modules\GoogleWorkspace\Services\GoogleDirectoryImporter;
 use App\Modules\GoogleWorkspace\Services\GoogleIntegrationStatus;
 use App\Modules\Organisations\Models\Organisation;
 use App\Modules\Organisations\Services\OrganisationContext;
@@ -44,7 +48,74 @@ class DomainController extends Controller
             'search' => $search,
             'showOrganisation' => $current === null,
             'canRequest' => $user->hasAbilityAnywhere(Ability::DomainsRequest),
+            'canSync' => $user->hasAbility(Ability::AccountsSync),
+            'unassignedCount' => self::canAssign($user) ? GoogleDomain::query()->unassigned()->count() : null,
         ]);
+    }
+
+    /** Domains found in Google Workspace that no organisation owns yet (Super Admin only). */
+    public function unassigned(Request $request): View
+    {
+        $user = $request->user();
+        abort_unless(self::canAssign($user), 403);
+
+        $search = trim($request->string('search')->toString());
+
+        $domains = GoogleDomain::query()
+            ->unassigned()
+            ->when($search !== '', fn (Builder $query) => $query->where('domain_name', 'like', '%'.addcslashes($search, '%_\\').'%'))
+            ->orderByDesc('is_primary')
+            ->orderBy('domain_name')
+            ->paginate(25)
+            ->withQueryString();
+
+        $mailboxes = $domains->getCollection()
+            ->mapWithKeys(fn (GoogleDomain $domain) => [$domain->id => DomainMappingService::unassignedAccountsOn($domain->domain_name)]);
+
+        return view('domains.unassigned', [
+            'domains' => $domains,
+            'mailboxes' => $mailboxes,
+            'search' => $search,
+            'organisations' => Organisation::query()->visibleTo($user, Ability::DomainsManage)->orderBy('name')->pluck('name', 'uuid')->all(),
+            'canAssignAccounts' => $user->hasAbility(Ability::AccountsReassignOrganisation),
+            'canSync' => $user->hasAbility(Ability::AccountsSync),
+            'lastSync' => GoogleSyncLog::query()->where('type', GoogleDirectoryImporter::TYPE_DOMAINS)
+                ->where('status', GoogleSyncLog::COMPLETED)->latest('id')->first(),
+        ]);
+    }
+
+    public function assignGoogleDomain(Request $request, GoogleDomain $googleDomain, DomainMappingService $mapping): RedirectResponse
+    {
+        $user = $request->user();
+        abort_unless(self::canAssign($user), 403);
+
+        $data = $request->validate([
+            'organisation' => ['required', 'uuid'],
+            'with_accounts' => ['nullable', 'boolean'],
+        ]);
+
+        // Resolved inside the caller's own scope; anything else does not exist.
+        $organisation = Organisation::query()->visibleTo($user, Ability::DomainsManage)->where('uuid', $data['organisation'])->firstOrFail();
+        Gate::authorize('mapDomains', $organisation);
+
+        $withAccounts = (bool) ($data['with_accounts'] ?? false);
+        abort_if($withAccounts && ! $user->hasAbility(Ability::AccountsReassignOrganisation), 403);
+
+        $result = $mapping->assignGoogleDomain($googleDomain, $organisation, $user, $withAccounts);
+
+        $message = "{$googleDomain->domain_name} assigned to {$organisation->name}.";
+
+        if ($withAccounts) {
+            $message .= " {$result['accounts']} mailbox(es) assigned and billed from today.";
+        }
+
+        return redirect()->route('domains.unassigned')->with('success', $message);
+    }
+
+    /** Assigning Google domains is a platform action: global access and domains.manage. */
+    public static function canAssign(User $user): bool
+    {
+        return $user->hasGlobalAccess() && $user->hasAbility(Ability::DomainsManage);
     }
 
     public function show(Request $request, OrganisationDomain $domain, DomainRequestService $requests): View

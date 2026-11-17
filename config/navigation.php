@@ -42,6 +42,7 @@ return [
         ]],
         ['heading' => 'Domain Management', 'items' => [
             ['label' => 'All Domains', 'icon' => 'globe', 'route' => 'domains.index', 'ability' => Ability::DomainsView],
+            ['label' => 'Unassigned Domains', 'icon' => 'circle-help', 'route' => 'domains.unassigned', 'ability' => Ability::DomainsManage],
             ['label' => 'Domain Requests', 'icon' => 'inbox', 'route' => 'domains.requests.index', 'ability' => Ability::DomainsView],
             ['label' => 'Pending Approvals', 'icon' => 'clock', 'route' => 'domains.requests.pending', 'ability' => Ability::DomainsApprove],
             ['label' => 'Domain Verification', 'icon' => 'shield-check', 'route' => 'domains.verification', 'ability' => Ability::DomainsProcess],

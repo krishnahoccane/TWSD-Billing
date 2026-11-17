@@ -9,10 +9,21 @@
 @endphp
 <x-layouts.app title="Domains" description="Domains that belong to the organisations you can see. Mailboxes are created on these domains."
                :breadcrumbs="[['label' => 'Domains']]">
-    @if ($canRequest)
+    @if ($canRequest || $canSync)
         <x-slot:actions>
-            <x-ui.button :href="route('domains.requests.create')" icon="plus">Request new domain</x-ui.button>
+            @if ($canSync)@include('domains._sync-button')@endif
+            @if ($canRequest)
+                <x-ui.button :href="route('domains.requests.create')" icon="plus">Request new domain</x-ui.button>
+            @endif
         </x-slot:actions>
+    @endif
+
+    @include('domains._tabs', ['active' => 'all'])
+
+    @if ($unassignedCount)
+        <x-ui.alert tone="warning" class="mb-4" title="{{ $unassignedCount }} domain(s) in Google Workspace are not assigned to an organisation">
+            Mailboxes on these domains stay unassigned and are not billed. <a href="{{ route('domains.unassigned') }}" class="font-medium underline">Assign them</a>.
+        </x-ui.alert>
     @endif
 
     <x-ui.table>

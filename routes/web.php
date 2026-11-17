@@ -87,6 +87,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         // Domains. {domain} and {domainRequest} are uuids resolved inside the
         // user's own scope (DomainsServiceProvider), then authorised by policy.
         Route::get('/domains', [DomainController::class, 'index'])->name('domains.index');
+        Route::get('/domains/unassigned', [DomainController::class, 'unassigned'])->name('domains.unassigned');
+        Route::post('/domains/unassigned/{googleDomain}/assign', [DomainController::class, 'assignGoogleDomain'])->name('domains.unassigned.assign');
         Route::get('/domains/requests', [DomainController::class, 'requests'])->name('domains.requests.index');
         Route::get('/domains/requests/pending', [DomainController::class, 'requests'])->defaults('filter', 'pending')->name('domains.requests.pending');
         Route::get('/domains/verification', [DomainController::class, 'requests'])->defaults('filter', 'verification')->name('domains.verification');

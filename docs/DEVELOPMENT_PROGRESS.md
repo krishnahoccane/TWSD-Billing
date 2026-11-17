@@ -430,6 +430,23 @@ made Alpine transitions look broken during the check; they work when the pane is
 - Not verified: an installation against a real MySQL/MariaDB server through the browser, Redis (extension not
   installed locally) and a real SMTP test e-mail.
 
+## Domain inventory and immediate sync (2026-11-17)
+
+- **Immediate sync** (D-24): `GoogleWorkspace/Services/DirectorySyncRunner` runs a directory job inside the request
+  when an administrator clicks Run now; the flash message shows the counts. Scheduled runs are unchanged (queued).
+- **Domain inventory** (D-25): migration `2026_11_24_000001_create_google_domains_table`, model
+  `Domains/Models/GoogleDomain`. The domain sync stores every Google domain and domain alias (`domainAliases[]`),
+  links each to its organisation mapping, and flags domains that disappear (never deleted).
+- **Domains → Unassigned** tab (`/domains/unassigned`, Super Admin with `domains.manage`): assign a domain to an
+  organisation through `DomainMappingService::assignGoogleDomain` (audited `domain.mapped`; Google's verification
+  state copied; optionally its unassigned mailboxes via `GoogleAccountService::assignOrganisation`).
+  "Sync domains from Google" button on All domains and Unassigned.
+- `config/queue.php` `retry_after` raised to 660 s (longer than the 600 s job timeout).
+- Tests: `Domains/GoogleDomainInventoryTest` (5, including the tenancy test) and the updated immediate-sync tests in
+  `GoogleWorkspace/DirectoryImportTest`.
+- Not verified against live Google: the alias flattening follows the Directory API reference (Domains resource,
+  DomainAlias fields `domainAliasName`, `parentDomainName`, `verified`).
+
 ## Project status
 
 All seven phases are built. Remaining work before production is configuration and the first live tests: mail

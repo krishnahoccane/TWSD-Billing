@@ -5,6 +5,7 @@ namespace App\Modules\Domains;
 use App\Modules\AccessControl\Enums\Ability;
 use App\Modules\Domains\Contracts\DomainVerificationProviderInterface;
 use App\Modules\Domains\Models\DomainRequest;
+use App\Modules\Domains\Models\GoogleDomain;
 use App\Modules\Domains\Models\OrganisationDomain;
 use App\Modules\Domains\Policies\DomainRequestPolicy;
 use App\Modules\Domains\Providers\GoogleDomainVerificationProvider;
@@ -48,6 +49,14 @@ class DomainsServiceProvider extends ServiceProvider
             $user = request()->user() ?? abort(401);
 
             return DomainRequest::query()->visibleTo($user, Ability::DomainsView)->where('uuid', $uuid)->firstOrFail();
+        });
+
+        // Google's domain inventory is platform-level: only global access sees it.
+        Route::bind('googleDomain', function (string $uuid) {
+            $user = request()->user() ?? abort(401);
+            abort_unless($user->hasGlobalAccess(), 404);
+
+            return GoogleDomain::query()->where('uuid', $uuid)->firstOrFail();
         });
 
         Route::bind('domain', function (string $uuid) {

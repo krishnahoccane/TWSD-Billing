@@ -6,30 +6,24 @@ use App\Http\Controllers\Controller;
 use App\Modules\AccessControl\Enums\Ability;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\GoogleWorkspace\Enums\AccountStatus;
-use App\Modules\GoogleWorkspace\Jobs\ImportGoogleDomainsJob;
-use App\Modules\GoogleWorkspace\Jobs\ImportGoogleUsersJob;
 use App\Modules\GoogleWorkspace\Jobs\ReconcileGoogleAccountsJob;
-use App\Modules\GoogleWorkspace\Jobs\SyncGoogleAccountsJob;
 use App\Modules\GoogleWorkspace\Models\GoogleAccount;
 use App\Modules\GoogleWorkspace\Models\GoogleApiLog;
 use App\Modules\GoogleWorkspace\Models\GoogleSyncLog;
+use App\Modules\GoogleWorkspace\Services\DirectorySyncRunner;
+use App\Modules\GoogleWorkspace\Services\GoogleDirectoryImporter;
 use App\Modules\GoogleWorkspace\Services\GoogleIntegrationStatus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Throwable;
 
 class WorkspaceController extends Controller
 {
-    private const JOBS = [
-        'users_full' => [ImportGoogleUsersJob::class, 'Full user import'],
-        'users_sync' => [SyncGoogleAccountsJob::class, 'User synchronisation'],
-        'domains' => [ImportGoogleDomainsJob::class, 'Domain synchronisation'],
-        'reconcile' => [ReconcileGoogleAccountsJob::class, 'Retry stuck operations'],
-    ];
-
     public function overview(Request $request, GoogleIntegrationStatus $status): View
     {
         Gate::authorize('viewAny', GoogleAccount::class);
@@ -60,7 +54,7 @@ class WorkspaceController extends Controller
 
         return view('workspace.sync', [
             'logs' => GoogleSyncLog::query()->with('triggeredBy:id,name')->latest('id')->paginate(15),
-            'jobs' => collect(self::JOBS)->map(fn (array $job) => $job[1])->all(),
+            'jobs' => collect(DirectorySyncRunner::TYPES)->map(fn (array $job) => $job[1])->all(),
             'mode' => $status->mode(),
             'stuck' => GoogleAccount::query()->whereNotNull('pending_operation')
                 ->where('pending_since', '<', now()->subMinutes(ReconcileGoogleAccountsJob::STUCK_AFTER_MINUTES))->count(),
@@ -70,17 +64,49 @@ class WorkspaceController extends Controller
         ]);
     }
 
-    public function run(Request $request, AuditLogger $audit): RedirectResponse
+    /** Runs the synchronisation now, in this request (no queue worker involved). */
+    public function run(Request $request, AuditLogger $audit, DirectorySyncRunner $runner): RedirectResponse
     {
         Gate::authorize(Ability::AccountsSync->value);
 
-        $data = $request->validate(['type' => ['required', Rule::in(array_keys(self::JOBS))]]);
-        [$job, $label] = self::JOBS[$data['type']];
+        $data = $request->validate(['type' => ['required', Rule::in(array_keys(DirectorySyncRunner::TYPES))]]);
+        $type = $data['type'];
+        $label = DirectorySyncRunner::label($type);
 
-        $job::dispatch($request->user()->getKey());
+        $audit->record('workspace.sync_requested', new: ['type' => $type], actor: $request->user());
 
-        $audit->record('workspace.sync_requested', new: ['type' => $data['type']], actor: $request->user());
+        $before = GoogleSyncLog::query()->max('id') ?? 0;
 
-        return back()->with('success', "{$label} queued. It runs on the queue worker; refresh this page to see the result.");
+        try {
+            $runner->run($type, $request->user());
+        } catch (Throwable $e) {
+            // The importer has already recorded the failure in the sync log.
+            report($e);
+
+            return back()->with('error', "{$label} failed: ".Str::limit($e->getMessage(), 300));
+        }
+
+        if ($type === 'reconcile') {
+            return back()->with('success', 'Stuck operations were re-queued. They are applied by the queue worker.');
+        }
+
+        $log = GoogleSyncLog::query()->where('id', '>', $before)->where('type', $this->logType($type))->latest('id')->first();
+
+        $summary = $log === null ? '' : match ($type) {
+            'domains' => " {$log->fetched} found in Google, {$log->created} new, {$log->unassigned} not assigned to an organisation.",
+            default => " {$log->fetched} fetched, {$log->created} new, {$log->updated} updated, {$log->unassigned} unassigned"
+                .($log->errors > 0 ? ", {$log->errors} errors" : '').'.',
+        };
+
+        return back()->with($log?->errors > 0 ? 'warning' : 'success', "{$label} finished.".$summary);
+    }
+
+    private function logType(string $type): string
+    {
+        return match ($type) {
+            'users_full' => GoogleDirectoryImporter::TYPE_FULL,
+            'users_sync' => GoogleDirectoryImporter::TYPE_SYNC,
+            default => GoogleDirectoryImporter::TYPE_DOMAINS,
+        };
     }
 }

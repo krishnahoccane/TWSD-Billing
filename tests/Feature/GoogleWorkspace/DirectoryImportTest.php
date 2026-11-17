@@ -6,7 +6,6 @@ use App\Modules\GoogleWorkspace\Enums\AccountOperation;
 use App\Modules\GoogleWorkspace\Enums\AccountStatus;
 use App\Modules\GoogleWorkspace\Enums\BillingStatus;
 use App\Modules\GoogleWorkspace\Exceptions\WorkspaceTransientException;
-use App\Modules\GoogleWorkspace\Jobs\ImportGoogleDomainsJob;
 use App\Modules\GoogleWorkspace\Jobs\ImportGoogleUsersJob;
 use App\Modules\GoogleWorkspace\Models\GoogleAccount;
 use App\Modules\GoogleWorkspace\Models\GoogleSyncLog;
@@ -187,25 +186,40 @@ class DirectoryImportTest extends WorkspaceTestCase
         ]);
     }
 
-    public function test_sync_screen_queues_jobs_and_is_restricted(): void
+    public function test_sync_screen_runs_immediately_without_the_queue_and_is_restricted(): void
     {
         [$organisation] = $this->organisationWithDomain('alpha.test');
+        $this->workspace()->seedUsers(3, ['alpha.test']);
         Queue::fake();
 
         $this->actingAs($this->organisationManager($organisation));
         $this->get('/workspace/sync')->assertForbidden();
         $this->post('/workspace/sync', ['type' => 'users_full'])->assertForbidden();
-        Queue::assertNothingPushed();
+        $this->assertSame(0, GoogleSyncLog::query()->count());
 
         $admin = $this->superAdmin();
         $this->actingAs($admin)->get('/workspace/sync')->assertOk()->assertSee('Mock mode');
-        $this->post('/workspace/sync', ['type' => 'users_full'])->assertSessionHas('success');
+        $this->post('/workspace/sync', ['type' => 'users_full'])
+            ->assertRedirect()->assertSessionHas('success', fn (string $m) => str_contains($m, '3 fetched, 3 new'));
         $this->post('/workspace/sync', ['type' => 'domains'])->assertSessionHas('success');
         $this->post('/workspace/sync', ['type' => 'drop_everything'])->assertSessionHasErrors('type');
 
-        Queue::assertPushedOn('google', ImportGoogleUsersJob::class, fn ($job) => $job->triggeredBy === $admin->id);
-        Queue::assertPushed(ImportGoogleDomainsJob::class, 1);
+        // Done in the request: nothing waits for a queue worker.
+        Queue::assertNothingPushed();
+        $this->assertSame(3, GoogleAccount::query()->where('organisation_id', $organisation->id)->count());
+        $this->assertDatabaseHas('google_sync_logs', ['type' => 'users_full', 'status' => 'completed', 'triggered_by' => $admin->id]);
+        $this->assertDatabaseHas('google_sync_logs', ['type' => 'domains', 'status' => 'completed', 'triggered_by' => $admin->id]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'workspace.sync_requested', 'user_id' => $admin->id]);
+    }
+
+    public function test_a_failed_immediate_sync_is_reported_and_logged(): void
+    {
+        $this->workspace()->failNext('users.list', new WorkspaceTransientException('Google is unavailable'));
+
+        $this->actingAs($this->superAdmin())->post('/workspace/sync', ['type' => 'users_sync'])
+            ->assertRedirect()->assertSessionHas('error', fn (string $m) => str_contains($m, 'Google is unavailable'));
+
+        $this->assertDatabaseHas('google_sync_logs', ['type' => 'users_sync', 'status' => 'failed']);
     }
 
     public function test_import_job_runs_the_full_import(): void

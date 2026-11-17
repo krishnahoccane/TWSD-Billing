@@ -15,18 +15,19 @@
     </div>
 
     <x-ui.card title="Run now" class="mt-6"
-               description="Jobs are queued and need a running queue worker. Ownership is never changed by synchronisation; unmatched mailboxes go to Unassigned accounts.">
-        <div class="flex flex-wrap gap-2">
+               description="Runs immediately — keep this page open until it finishes. Ownership is never changed by synchronisation; unmatched mailboxes go to Unassigned accounts and unmatched domains to Unassigned domains.">
+        <div class="flex flex-wrap gap-2" x-data="{ busy: false }">
             @foreach ($jobs as $type => $label)
-                <form method="POST" action="{{ route('workspace.sync.run') }}">
+                <form method="POST" action="{{ route('workspace.sync.run') }}" x-on:submit="busy = true">
                     @csrf
                     <input type="hidden" name="type" value="{{ $type }}">
-                    <x-ui.button type="submit" variant="secondary" icon="refresh-cw">{{ $label }}</x-ui.button>
+                    <x-ui.button type="submit" variant="secondary" icon="refresh-cw" x-bind:disabled="busy">{{ $label }}</x-ui.button>
                 </form>
             @endforeach
+            <span x-show="busy" x-cloak class="muted self-center text-sm">Running… this can take a minute.</span>
         </div>
         <p class="muted mt-3 text-xs">
-            Scheduled: users every 15 minutes, stuck-operation retry every 30 minutes, domains every 6 hours, full import daily.
+            Scheduled (needs the cron jobs): users every 15 minutes, stuck-operation retry every 30 minutes, domains every 6 hours, full import daily.
         </p>
     </x-ui.card>
 

@@ -4,8 +4,10 @@ namespace App\Modules\GoogleWorkspace\Services;
 
 use App\Models\User;
 use App\Modules\Billing\Services\BillingPeriodTracker;
+use App\Modules\Domains\Models\GoogleDomain;
 use App\Modules\Domains\Models\OrganisationDomain;
 use App\Modules\GoogleWorkspace\Contracts\WorkspaceProviderInterface;
+use App\Modules\GoogleWorkspace\Data\WorkspaceDomain;
 use App\Modules\GoogleWorkspace\Data\WorkspaceUser;
 use App\Modules\GoogleWorkspace\Enums\AccountStatus;
 use App\Modules\GoogleWorkspace\Enums\BillingStatus;
@@ -99,9 +101,10 @@ class GoogleDirectoryImporter
     }
 
     /**
-     * Compares Google's domain list with the mapped domains. Domains that
-     * exist in Google but are not mapped to an organisation are reported,
-     * not assigned.
+     * Stores every Google domain and alias in the google_domains inventory,
+     * links each one to its organisation mapping (if any) and refreshes the
+     * mappings' verification state. Domains without a mapping are listed as
+     * Unassigned for a Super Admin — they are never assigned automatically.
      */
     public function importDomains(?User $triggeredBy = null): GoogleSyncLog
     {
@@ -110,6 +113,8 @@ class GoogleDirectoryImporter
         try {
             $remote = collect($this->provider->listDomains())->keyBy('name');
             $notes = [];
+
+            $log->created = $this->storeInventory($remote);
 
             foreach (OrganisationDomain::query()->where('status', '!=', 'removed')->get() as $domain) {
                 $match = $remote->get($domain->domain_name);
@@ -144,6 +149,46 @@ class GoogleDirectoryImporter
 
             throw $e;
         }
+    }
+
+    /**
+     * @param  Collection<string, WorkspaceDomain>  $remote
+     * @return int domains seen for the first time
+     */
+    private function storeInventory(Collection $remote): int
+    {
+        $now = now();
+        $created = 0;
+
+        $mappings = OrganisationDomain::query()->where('status', '!=', 'removed')->pluck('id', 'domain_name');
+
+        DB::transaction(function () use ($remote, $mappings, $now, &$created) {
+            foreach ($remote as $name => $domain) {
+                $row = GoogleDomain::query()->firstOrNew(['domain_name' => $name]);
+
+                if (! $row->exists) {
+                    $row->first_seen_at = $now;
+                    $created++;
+                }
+
+                $row->forceFill([
+                    'alias_of' => $domain->aliasOf,
+                    'is_primary' => $domain->isPrimary,
+                    'verified' => $domain->verified,
+                    'organisation_domain_id' => $mappings->get($name),
+                    'last_seen_at' => $now,
+                    'missing_from_google_at' => null,
+                ])->save();
+            }
+
+            // Gone from Google: kept for history, flagged.
+            GoogleDomain::query()
+                ->whereNotIn('domain_name', $remote->keys()->all())
+                ->whereNull('missing_from_google_at')
+                ->update(['missing_from_google_at' => $now]);
+        });
+
+        return $created;
     }
 
     /**
