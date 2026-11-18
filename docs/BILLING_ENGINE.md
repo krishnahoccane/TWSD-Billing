@@ -68,7 +68,7 @@ line tax    = round_half_up( line amount × tax rate )
 - **One invoice per organisation per period**: unique `billing_cycles (organisation, period)` and unique
   `invoices.billing_cycle_id`, plus a row lock, so retries, duplicate jobs and double clicks return the same invoice.
 - **Drafts** (older months billed by hand) are internal, unnumbered and can be recalculated.
-- **Issuing** assigns the next number from a locked, gap-free sequence (`INV-000001`), sets the issue and due
+- **Issuing** assigns the next number from a locked, gap-free sequence (`26/TWSD-001`: `BILLING_INVOICE_NUMBER_FORMAT`, restarting each calendar year), sets the issue and due
   dates, and freezes the invoice.
 - **Immutable after issue**: the models refuse changes to charges, tax, period, number, customer snapshot and
   lines. Each line stores the mailbox address, name, status, days, price and price source as they were.

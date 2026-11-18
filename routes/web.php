@@ -141,6 +141,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/integrations/zoho/disconnect', [ZohoIntegrationController::class, 'disconnect'])->name('integrations.zoho.disconnect');
         Route::post('/integrations/zoho/test', [ZohoIntegrationController::class, 'test'])->middleware('throttle:10,1')->name('integrations.zoho.test');
         Route::post('/integrations/zoho/sync', [ZohoIntegrationController::class, 'sync'])->middleware('throttle:10,1')->name('integrations.zoho.sync');
+        Route::get('/integrations/zoho/customers', [ZohoIntegrationController::class, 'customers'])->middleware('throttle:60,1')->name('integrations.zoho.customers');
+        Route::post('/integrations/zoho/customers/{zohoContactId}/link', [ZohoIntegrationController::class, 'linkCustomer'])
+            ->where('zohoContactId', '[A-Za-z0-9]{1,40}')->middleware('throttle:30,1')->name('integrations.zoho.customers.link');
+        Route::post('/integrations/zoho/organisations/{organisation}/import', [ZohoIntegrationController::class, 'importCustomer'])
+            ->middleware('throttle:30,1')->name('integrations.zoho.customers.import');
         Route::post('/invoices/{invoice}/simulate-zoho-payment', [ZohoIntegrationController::class, 'simulatePayment'])->name('invoices.simulate-zoho-payment');
         Route::get('/invoices/{invoice}/pdf', [ZohoIntegrationController::class, 'pdf'])->name('invoices.pdf');
 

@@ -32,6 +32,16 @@ class LoggingZohoBooksClient implements ZohoBooksClientInterface
         return $this->log('organizations.list', null, fn () => $this->inner->organizations());
     }
 
+    public function listContacts(int $page = 1, ?string $search = null): array
+    {
+        return $this->log('contacts.list', 'page '.$page, fn () => $this->inner->listContacts($page, $search));
+    }
+
+    public function getContact(string $contactId): array
+    {
+        return $this->log('contacts.get', $contactId, fn () => $this->inner->getContact($contactId));
+    }
+
     public function findContactByName(string $contactName): ?array
     {
         return $this->log('contacts.find', $contactName, fn () => $this->inner->findContactByName($contactName));

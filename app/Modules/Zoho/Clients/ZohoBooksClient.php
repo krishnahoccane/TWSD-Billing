@@ -43,6 +43,74 @@ class ZohoBooksClient implements ZohoBooksClientInterface
         ], $data['organizations'] ?? []);
     }
 
+    public function listContacts(int $page = 1, ?string $search = null): array
+    {
+        $data = $this->send('GET', '/contacts', query: array_filter([
+            'contact_type' => 'customer',
+            'filter_by' => 'Status.All',
+            'sort_column' => 'contact_name',
+            'search_text' => filled($search) ? mb_substr((string) $search, 0, 100) : null,
+            'page' => $page,
+            'per_page' => 50,
+        ], fn ($value) => $value !== null));
+
+        return [
+            'contacts' => array_map(fn (array $contact) => [
+                'contact_id' => (string) $contact['contact_id'],
+                'contact_name' => (string) ($contact['contact_name'] ?? ''),
+                'company_name' => (string) ($contact['company_name'] ?? ''),
+                'email' => ($contact['email'] ?? '') ?: null,
+                'phone' => ($contact['phone'] ?? '') ?: (($contact['mobile'] ?? '') ?: null),
+                'status' => (string) ($contact['status'] ?? ''),
+                'outstanding' => (string) ($contact['outstanding_receivable_amount'] ?? '0'),
+            ], $data['contacts'] ?? []),
+            'has_more' => (bool) ($data['page_context']['has_more_page'] ?? false),
+        ];
+    }
+
+    public function getContact(string $contactId): array
+    {
+        return self::normaliseContact($this->send('GET', '/contacts/'.rawurlencode($contactId))['contact'] ?? []);
+    }
+
+    /**
+     * Zoho contact object → the fields this application uses. Shared with the mock.
+     *
+     * @param  array<string, mixed>  $contact
+     * @return array{contact_id: string, contact_name: string, company_name: string, legal_name: ?string, gst_no: ?string, pan_no: ?string, email: ?string, phone: ?string, billing_address: array<string, ?string>, primary_contact: array{name: ?string, email: ?string, phone: ?string}}
+     */
+    public static function normaliseContact(array $contact): array
+    {
+        $blank = fn ($value) => is_string($value) && trim($value) !== '' ? trim($value) : null;
+        $persons = $contact['contact_persons'] ?? [];
+        $primary = collect($persons)->firstWhere('is_primary_contact', true) ?? ($persons[0] ?? []);
+        $address = $contact['billing_address'] ?? [];
+
+        return [
+            'contact_id' => (string) ($contact['contact_id'] ?? ''),
+            'contact_name' => (string) ($contact['contact_name'] ?? ''),
+            'company_name' => (string) ($contact['company_name'] ?? ''),
+            'legal_name' => $blank($contact['legal_name'] ?? null),
+            'gst_no' => $blank($contact['gst_no'] ?? null),
+            'pan_no' => $blank($contact['pan_no'] ?? null),
+            'email' => $blank($contact['email'] ?? null) ?? $blank($primary['email'] ?? null),
+            'phone' => $blank($contact['phone'] ?? null) ?? $blank($contact['mobile'] ?? null),
+            'billing_address' => [
+                'address' => $blank($address['address'] ?? null),
+                'street2' => $blank($address['street2'] ?? null),
+                'city' => $blank($address['city'] ?? null),
+                'state' => $blank($address['state'] ?? null),
+                'zip' => $blank($address['zip'] ?? null),
+                'country' => $blank($address['country'] ?? null),
+            ],
+            'primary_contact' => [
+                'name' => $blank(trim(($primary['first_name'] ?? '').' '.($primary['last_name'] ?? ''))),
+                'email' => $blank($primary['email'] ?? null),
+                'phone' => $blank($primary['phone'] ?? null) ?? $blank($primary['mobile'] ?? null),
+            ],
+        ];
+    }
+
     public function findContactByName(string $contactName): ?array
     {
         $data = $this->send('GET', '/contacts', query: ['contact_name' => $contactName, 'contact_type' => 'customer']);

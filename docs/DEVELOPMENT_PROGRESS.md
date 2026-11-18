@@ -477,6 +477,26 @@ made Alpine transitions look broken during the check; they work when the pane is
 - Domain page: list of mailboxes on the domain (scoped by `accounts.view`), linking to each mailbox.
 - Tests: `Billing/BillingStartTest` (5, including tenancy).
 
+## Invoice numbering and Zoho customer linking (2026-11-18)
+
+- Invoice numbers are `{YY}/TWSD-{SEQ}` (`26/TWSD-001`), from `BILLING_INVOICE_NUMBER_FORMAT` /
+  `BILLING_INVOICE_NUMBER_PADDING` (replaces `BILLING_INVOICE_PREFIX`). `{YY}` is the calendar year of the issue date;
+  the locked, gap-free sequence restarts at 1 each year (`number_sequences` row `invoice:26/TWSD-`). Issued numbers
+  are never renumbered. The Zoho PDF file name replaces `/` with `-`.
+- **Zoho customers** (Integrations → Zoho Customers, `integrations.zoho.manage`): lists the customers in Zoho Books
+  (live read, 50 per page, search). **Link** connects one to an organisation (resolved in the user's
+  `organisations.update` scope), so invoices go to that customer instead of a new duplicate. Optionally copies the
+  legal name, GSTIN, PAN (from Zoho's `pan_no`, else characters 3–12 of the GSTIN), billing address, billing e-mail
+  and primary contact into the organisation through `OrganisationService::update` (audited); invalid values are
+  skipped and the organisation's name and code are never changed. **Update details from Zoho** repeats the copy.
+- A linked mapping has `zoho_mappings.origin = 'zoho'` (migration `2026_11_25_000001`): its Zoho contact is never
+  updated from here. One Zoho customer links to one organisation; moving an organisation that already has invoices
+  in Zoho to another customer is refused. Audited `zoho.customer_linked`.
+- Client: `listContacts` (`GET /contacts?contact_type=customer&filter_by=Status.All&sort_column=contact_name`) and
+  `getContact` (`GET /contacts/{id}`), checked against the Zoho Books v3 Contacts reference; mock and logging
+  clients updated. Not yet run against the live Zoho organisation.
+- Tests: `Zoho/ZohoCustomerLinkTest` (6, including access), numbering in `Billing/BillingEngineTest`.
+
 ## Project status
 
 All seven phases are built. Remaining work before production is configuration and the first live tests: mail

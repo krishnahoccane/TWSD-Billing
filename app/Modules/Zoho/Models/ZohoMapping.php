@@ -21,6 +21,9 @@ class ZohoMapping extends Model
 
     public const NEEDS_ATTENTION = 'needs_attention';
 
+    /** origin: the Zoho record existed first and was linked; Zoho owns its details. */
+    public const ORIGIN_ZOHO = 'zoho';
+
     protected $guarded = [];
 
     protected function casts(): array

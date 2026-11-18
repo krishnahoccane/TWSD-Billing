@@ -29,6 +29,7 @@
                         @endif
                         <form method="POST" action="{{ route('integrations.zoho.test') }}">@csrf <x-ui.button type="submit" variant="secondary">Test connection</x-ui.button></form>
                         <form method="POST" action="{{ route('integrations.zoho.sync') }}">@csrf <x-ui.button type="submit" variant="secondary" icon="refresh-cw">Sync now</x-ui.button></form>
+                        <x-ui.button variant="secondary" icon="contact" :href="route('integrations.zoho.customers')">Zoho customers</x-ui.button>
                         @if ($connected)
                             <x-ui.button variant="ghost" @click="$dispatch('open-modal', 'disconnect')">Disconnect</x-ui.button>
                         @endif

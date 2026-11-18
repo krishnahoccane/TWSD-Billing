@@ -7,6 +7,7 @@ use App\Modules\AccessControl\Enums\Ability;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Billing\Models\Invoice;
 use App\Modules\Billing\Support\Money;
+use App\Modules\Organisations\Models\Organisation;
 use App\Modules\Zoho\Clients\MockZohoBooksClient;
 use App\Modules\Zoho\Contracts\ZohoBooksClientInterface;
 use App\Modules\Zoho\Exceptions\ZohoException;
@@ -156,6 +157,81 @@ class ZohoIntegrationController extends Controller
         $audit->record('zoho.sync_requested', actor: $request->user());
 
         return back()->with('success', 'Zoho Books synchronisation started. Refresh to see the result.');
+    }
+
+    /** Customers already in Zoho Books, to link to organisations here instead of creating duplicates. */
+    public function customers(Request $request, ZohoSync $sync): View
+    {
+        Gate::authorize(Ability::IntegrationsManageZoho->value);
+
+        $page = max(1, min(500, $request->integer('page', 1)));
+        $search = Str::limit(trim($request->string('search')->toString()), 100, '');
+        $error = null;
+        $result = ['contacts' => [], 'has_more' => false];
+
+        try {
+            $result = $sync->listCustomers($page, $search !== '' ? $search : null);
+        } catch (Throwable $e) {
+            report($e);
+            $error = $e->getMessage();
+        }
+
+        $type = (new Organisation)->getMorphClass();
+
+        return view('integrations.zoho-customers', [
+            'mode' => $sync->mode(),
+            'contacts' => $result['contacts'],
+            'hasMore' => $result['has_more'],
+            'page' => $page,
+            'search' => $search,
+            'error' => $error,
+            // Organisations that may be linked (and updated) by this user, with their current link.
+            'organisations' => Organisation::query()->visibleTo($request->user(), Ability::OrganisationsUpdate)->orderBy('name')->get(['id', 'uuid', 'name', 'code'])
+                ->map(fn (Organisation $organisation) => [
+                    'organisation' => $organisation,
+                    'zoho_id' => ZohoMapping::query()->where('mappable_type', $type)->where('mappable_id', $organisation->id)->value('zoho_id'),
+                ]),
+        ]);
+    }
+
+    public function linkCustomer(Request $request, string $zohoContactId, ZohoSync $sync): RedirectResponse
+    {
+        Gate::authorize(Ability::IntegrationsManageZoho->value);
+
+        $data = $request->validate([
+            'organisation' => ['required', 'uuid'],
+            'import_details' => ['nullable', 'boolean'],
+        ]);
+
+        // Resolved inside the caller's own scope; anything else does not exist.
+        $organisation = Organisation::query()->visibleTo($request->user(), Ability::OrganisationsUpdate)
+            ->where('uuid', $data['organisation'])->firstOrFail();
+        Gate::authorize('update', $organisation);
+
+        try {
+            $mapping = $sync->linkCustomer($organisation, $zohoContactId, $request->user(), (bool) ($data['import_details'] ?? false));
+        } catch (ZohoException $e) {
+            return back()->with('error', 'Zoho Books: '.$e->getMessage());
+        }
+
+        return back()->with('success', "{$organisation->name} is now linked to the Zoho customer \"{$mapping->zoho_number}\". Its invoices will be sent to that customer"
+            .(($data['import_details'] ?? false) ? ', and its GST, PAN, address and contact details were copied from Zoho.' : '.'));
+    }
+
+    public function importCustomer(Request $request, Organisation $organisation, ZohoSync $sync): RedirectResponse
+    {
+        Gate::authorize(Ability::IntegrationsManageZoho->value);
+        Gate::authorize('update', $organisation);
+
+        try {
+            $changed = $sync->importCustomerDetails($organisation, $request->user());
+        } catch (ZohoException $e) {
+            return back()->with('error', 'Zoho Books: '.$e->getMessage());
+        }
+
+        return back()->with('success', $changed === []
+            ? "{$organisation->name} already matches Zoho Books."
+            : "{$organisation->name} updated from Zoho Books: ".implode(', ', array_map(fn (string $field) => str_replace('_', ' ', $field), $changed)).'.');
     }
 
     /**

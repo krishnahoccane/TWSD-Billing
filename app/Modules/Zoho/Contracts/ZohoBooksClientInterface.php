@@ -21,6 +21,20 @@ interface ZohoBooksClientInterface
     /** @return list<array{organization_id: string, name: string}> */
     public function organizations(): array;
 
+    /**
+     * Customers in Zoho Books, one page (sorted by name).
+     *
+     * @return array{contacts: list<array{contact_id: string, contact_name: string, company_name: string, email: ?string, phone: ?string, status: string, outstanding: string}>, has_more: bool}
+     */
+    public function listContacts(int $page = 1, ?string $search = null): array;
+
+    /**
+     * One contact with its tax and address details.
+     *
+     * @return array{contact_id: string, contact_name: string, company_name: string, legal_name: ?string, gst_no: ?string, pan_no: ?string, email: ?string, phone: ?string, billing_address: array<string, ?string>, primary_contact: array{name: ?string, email: ?string, phone: ?string}}
+     */
+    public function getContact(string $contactId): array;
+
     /** @return array{contact_id: string, contact_name: string}|null exact contact_name match */
     public function findContactByName(string $contactName): ?array;
 

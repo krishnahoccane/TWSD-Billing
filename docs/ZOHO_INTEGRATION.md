@@ -67,6 +67,14 @@ Duplicates are impossible by construction: one `zoho_mappings` row per local rec
 by contact name / invoice number before creating, Zoho payments stored under `zoho:<payment_id>` (unique), and our
 own pushed payments recognised by their `WCC-PAY-` marker.
 
+## Customers that already exist in Zoho
+
+Integrations → **Zoho Customers** lists the customers in Zoho Books. **Link** one to an organisation before its first
+invoice is sent, so that invoice goes to the existing customer instead of a new duplicate. With "Copy details" ticked,
+the legal name, GSTIN, PAN (or the PAN inside the GSTIN), billing address, e-mail and primary contact are copied into
+the organisation. A linked customer is never renamed or updated in Zoho from here (decision D-27). Organisations that
+are not linked still get a customer named "Name (CODE)" created on their first invoice.
+
 ## Pay link and PDF
 
 - The invoice page shows **Pay ₹…** to the organisation, linking to the invoice's `invoice_url` from Zoho — Zoho's

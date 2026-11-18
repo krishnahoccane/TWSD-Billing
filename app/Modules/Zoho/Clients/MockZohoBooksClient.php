@@ -103,6 +103,50 @@ class MockZohoBooksClient implements ZohoBooksClientInterface
         return [['organization_id' => (string) (config('wcc.zoho.organisation_id') ?: 'MOCK-ORG'), 'name' => 'Mock Zoho Books organisation']];
     }
 
+    /**
+     * A customer that already exists in (mock) Zoho Books, created there by hand.
+     *
+     * @param  array<string, mixed>  $contact  Zoho contact fields
+     */
+    public function seedContact(array $contact): string
+    {
+        $id = $this->id('C');
+        $this->contacts[$id] = $contact + ['contact_type' => 'customer'];
+        $this->save();
+
+        return $id;
+    }
+
+    public function listContacts(int $page = 1, ?string $search = null): array
+    {
+        $this->called('contacts.list', 'page '.$page);
+
+        $rows = collect($this->contacts)
+            ->filter(fn (array $contact) => ($contact['contact_type'] ?? 'customer') === 'customer')
+            ->filter(fn (array $contact) => blank($search) || str_contains(mb_strtolower($contact['contact_name'] ?? ''), mb_strtolower((string) $search)))
+            ->sortBy(fn (array $contact) => mb_strtolower($contact['contact_name'] ?? ''))
+            ->map(fn (array $contact, string $id) => [
+                'contact_id' => $id,
+                'contact_name' => (string) ($contact['contact_name'] ?? ''),
+                'company_name' => (string) ($contact['company_name'] ?? ''),
+                'email' => $contact['email'] ?? ($contact['contact_persons'][0]['email'] ?? null),
+                'phone' => $contact['phone'] ?? null,
+                'status' => 'active',
+                'outstanding' => '0.00',
+            ])->values();
+
+        return ['contacts' => $rows->slice(($page - 1) * 50, 50)->values()->all(), 'has_more' => $rows->count() > $page * 50];
+    }
+
+    public function getContact(string $contactId): array
+    {
+        $this->called('contacts.get', $contactId);
+
+        $contact = $this->contacts[$contactId] ?? throw new ZohoException("Zoho Books error 1002: contact {$contactId} does not exist.");
+
+        return ZohoBooksClient::normaliseContact(['contact_id' => $contactId] + $contact);
+    }
+
     public function findContactByName(string $contactName): ?array
     {
         $this->called('contacts.find', $contactName);

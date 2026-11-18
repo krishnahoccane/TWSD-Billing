@@ -59,6 +59,7 @@ return [
         ['heading' => 'Integrations', 'items' => [
             ['label' => 'Google Workspace', 'icon' => 'plug', 'route' => 'integrations.google', 'ability' => Ability::IntegrationsManageGoogle],
             ['label' => 'Zoho Books', 'icon' => 'book-open', 'route' => 'integrations.zoho', 'ability' => Ability::IntegrationsManageZoho],
+            ['label' => 'Zoho Customers', 'icon' => 'contact', 'route' => 'integrations.zoho.customers', 'ability' => Ability::IntegrationsManageZoho],
             ['label' => 'Integration Logs', 'icon' => 'scroll-text', 'route' => 'integrations.logs', 'ability' => Ability::IntegrationsViewLogs],
         ]],
         ['heading' => 'System', 'items' => [

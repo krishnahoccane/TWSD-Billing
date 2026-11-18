@@ -2,6 +2,7 @@
 
 namespace App\Modules\Zoho\Services;
 
+use App\Models\User;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Billing\Models\CreditNote;
 use App\Modules\Billing\Models\Invoice;
@@ -10,6 +11,7 @@ use App\Modules\Billing\Services\PaymentService;
 use App\Modules\Billing\Support\Money;
 use App\Modules\Notifications\NotificationEvents;
 use App\Modules\Organisations\Models\Organisation;
+use App\Modules\Organisations\Services\OrganisationService;
 use App\Modules\Zoho\Contracts\ZohoBooksClientInterface;
 use App\Modules\Zoho\Exceptions\ZohoNotConnectedException;
 use App\Modules\Zoho\Models\WebhookEvent;
@@ -17,6 +19,7 @@ use App\Modules\Zoho\Models\ZohoMapping;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
@@ -62,7 +65,11 @@ class ZohoSync
         $payload = $this->contactPayload($organisation);
 
         if ($mapping->zoho_id !== null) {
-            $this->client->updateContact($mapping->zoho_id, $payload);
+            // A customer linked from Zoho keeps its own name and details there.
+            if ($mapping->origin !== ZohoMapping::ORIGIN_ZOHO) {
+                $this->client->updateContact($mapping->zoho_id, $payload);
+            }
+
             $this->markSynced($mapping);
 
             return $mapping->zoho_id;
@@ -78,6 +85,158 @@ class ZohoSync
             new: ['zoho_contact_id' => $contactId, 'adopted_existing' => $existing !== null], organisation: $organisation);
 
         return $contactId;
+    }
+
+    /**
+     * One page of Zoho Books customers, each with the organisation it is
+     * linked to here (if any).
+     *
+     * @return array{contacts: list<array<string, mixed>>, has_more: bool}
+     */
+    public function listCustomers(int $page = 1, ?string $search = null): array
+    {
+        $result = $this->client->listContacts($page, $search);
+
+        $linked = ZohoMapping::query()
+            ->where('mappable_type', (new Organisation)->getMorphClass())
+            ->whereIn('zoho_id', array_column($result['contacts'], 'contact_id'))
+            ->pluck('mappable_id', 'zoho_id');
+
+        $organisations = Organisation::query()->whereIn('id', $linked->values())->get(['id', 'uuid', 'name', 'code'])->keyBy('id');
+
+        $result['contacts'] = array_map(fn (array $contact) => $contact + [
+            'organisation' => isset($linked[$contact['contact_id']]) ? $organisations->get($linked[$contact['contact_id']]) : null,
+        ], $result['contacts']);
+
+        return $result;
+    }
+
+    /**
+     * Link an organisation to a customer that already exists in Zoho Books,
+     * so invoices go to that customer instead of a new duplicate. Zoho then
+     * owns the customer's details (they are never overwritten from here).
+     *
+     * @throws ValidationException
+     */
+    public function linkCustomer(Organisation $organisation, string $contactId, User $actor, bool $importDetails = true): ZohoMapping
+    {
+        $contact = $this->client->getContact($contactId);
+
+        $mapping = DB::transaction(function () use ($organisation, $contact, $actor) {
+            $type = (new Organisation)->getMorphClass();
+
+            $other = ZohoMapping::query()->where('mappable_type', $type)->where('zoho_id', $contact['contact_id'])
+                ->where('mappable_id', '!=', $organisation->getKey())->lockForUpdate()->first();
+
+            if ($other !== null) {
+                $name = Organisation::query()->whereKey($other->mappable_id)->value('name');
+                throw ValidationException::withMessages(['contact' => "This Zoho customer is already linked to {$name}."]);
+            }
+
+            $mapping = $this->mappingFor($organisation, 'contact');
+            $previous = $mapping->zoho_id;
+
+            if ($previous !== null && $previous !== $contact['contact_id'] && $this->hasInvoicesInZoho($organisation)) {
+                throw ValidationException::withMessages(['contact' => "{$organisation->name} already has invoices in Zoho Books under another customer, so it cannot be moved to a different customer here."]);
+            }
+
+            $mapping->forceFill([
+                'zoho_id' => $contact['contact_id'],
+                'zoho_number' => Str::limit($contact['contact_name'], 64, ''),
+                'origin' => ZohoMapping::ORIGIN_ZOHO,
+            ]);
+            $this->markSynced($mapping);
+
+            $this->audit->record('zoho.customer_linked', $organisation,
+                previous: $previous !== null ? ['zoho_contact_id' => $previous] : null,
+                new: ['zoho_contact_id' => $contact['contact_id'], 'zoho_contact_name' => $contact['contact_name']],
+                organisation: $organisation, actor: $actor);
+
+            return $mapping;
+        });
+
+        if ($importDetails) {
+            $this->importCustomerDetails($organisation, $actor, $contact);
+        }
+
+        return $mapping;
+    }
+
+    /**
+     * Copy the customer's details from Zoho Books into the organisation:
+     * legal name, GSTIN, PAN, billing address and contact. Only fields Zoho
+     * has a valid value for are changed; the organisation name and code
+     * stay as they are here. Audited as an organisation update.
+     *
+     * @param  array<string, mixed>|null  $contact  already-fetched contact
+     * @return list<string> the fields that changed
+     */
+    public function importCustomerDetails(Organisation $organisation, User $actor, ?array $contact = null): array
+    {
+        if ($contact === null) {
+            $contactId = $this->mapping($organisation)?->zoho_id
+                ?? throw ValidationException::withMessages(['contact' => 'This organisation is not linked to a Zoho Books customer.']);
+            $contact = $this->client->getContact($contactId);
+        }
+
+        $data = self::organisationDetailsFrom($contact);
+        $before = $organisation->only(array_keys($data));
+
+        app(OrganisationService::class)->update($organisation, $data, $actor);
+
+        return array_keys(array_filter($data, fn ($value, string $key) => (string) ($before[$key] ?? '') !== (string) $value, ARRAY_FILTER_USE_BOTH));
+    }
+
+    /**
+     * Zoho contact → organisation fields. Invalid or empty values are left out.
+     *
+     * @param  array<string, mixed>  $contact  normalised (ZohoBooksClient::normaliseContact)
+     * @return array<string, string>
+     */
+    public static function organisationDetailsFrom(array $contact): array
+    {
+        $gstin = Str::upper((string) ($contact['gst_no'] ?? ''));
+        $gstin = preg_match('/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/', $gstin) ? $gstin : null;
+
+        // The PAN is characters 3–12 of the GSTIN when Zoho has no separate PAN.
+        $pan = Str::upper((string) ($contact['pan_no'] ?? '')) ?: ($gstin !== null ? substr($gstin, 2, 10) : '');
+        $pan = preg_match('/^[A-Z]{5}[0-9]{4}[A-Z]$/', $pan) ? $pan : null;
+
+        $address = $contact['billing_address'] ?? [];
+        $country = (string) ($address['country'] ?? '');
+        $country = match (true) {
+            Str::lower($country) === 'india' => 'IN',
+            (bool) preg_match('/^[A-Za-z]{2}$/', $country) => Str::upper($country),
+            default => null,
+        };
+
+        $primary = $contact['primary_contact'] ?? [];
+        $email = fn ($value) => is_string($value) && filter_var($value, FILTER_VALIDATE_EMAIL) ? Str::limit($value, 255, '') : null;
+        $phone = fn ($value) => is_string($value) && preg_match('/^[0-9+()\-\s]{3,32}$/', $value) ? $value : null;
+
+        return array_filter([
+            'legal_name' => Str::limit((string) (($contact['legal_name'] ?? null) ?: ($contact['company_name'] ?? '')), 255, '') ?: null,
+            'gstin' => $gstin,
+            'pan' => $pan,
+            'billing_address' => collect([$address['address'] ?? null, $address['street2'] ?? null])->filter()->implode("\n") ?: null,
+            'city' => Str::limit((string) ($address['city'] ?? ''), 100, '') ?: null,
+            'state' => Str::limit((string) ($address['state'] ?? ''), 100, '') ?: null,
+            'postal_code' => Str::limit((string) ($address['zip'] ?? ''), 16, '') ?: null,
+            'country' => $country,
+            'billing_email' => $email($contact['email'] ?? null),
+            'primary_contact_name' => Str::limit((string) ($primary['name'] ?? ''), 255, '') ?: null,
+            'primary_contact_email' => $email($primary['email'] ?? null),
+            'contact_phone' => $phone($primary['phone'] ?? null) ?? $phone($contact['phone'] ?? null),
+        ], fn ($value) => $value !== null);
+    }
+
+    private function hasInvoicesInZoho(Organisation $organisation): bool
+    {
+        return ZohoMapping::query()
+            ->where('mappable_type', (new Invoice)->getMorphClass())
+            ->whereNotNull('zoho_id')
+            ->whereIn('mappable_id', Invoice::query()->where('organisation_id', $organisation->getKey())->select('id'))
+            ->exists();
     }
 
     // ---- Invoices ---------------------------------------------------------
