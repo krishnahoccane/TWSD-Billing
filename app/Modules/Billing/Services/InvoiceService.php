@@ -227,6 +227,46 @@ class InvoiceService
     }
 
     /**
+     * Zoho Books shows the invoice fully paid, but our total was a few paise
+     * higher because the two systems rounded GST differently. Close the
+     * remainder with a system credit note so both agree. Not pushed to Zoho
+     * (it is already settled there) and not flagged for attention. Only
+     * ZohoSync calls this, after checking the difference is within
+     * BILLING_ROUNDING_TOLERANCE_PAISE.
+     */
+    public function writeOffRounding(Invoice $invoice, int $amountMinor, int $zohoTotalMinor): ?CreditNote
+    {
+        return DB::transaction(function () use ($invoice, $amountMinor, $zohoTotalMinor) {
+            $invoice = Invoice::query()->whereKey($invoice->getKey())->lockForUpdate()->firstOrFail();
+
+            if (! $invoice->isOpen() || $amountMinor <= 0 || $amountMinor > $invoice->balance_minor
+                || $amountMinor > (int) config('wcc.billing.rounding_tolerance_minor', 100)) {
+                return null;
+            }
+
+            $note = CreditNote::query()->create([
+                'organisation_id' => $invoice->organisation_id,
+                'invoice_id' => $invoice->getKey(),
+                'credit_note_number' => $this->nextNumber('credit_note', (string) config('wcc.billing.credit_note_prefix', 'CN-')),
+                'amount_minor' => $amountMinor,
+                'currency' => $invoice->currency,
+                'reason' => 'GST rounding difference: Zoho Books total '.Money::format($zohoTotalMinor, $invoice->currency).' is paid in full.',
+                'issued_by' => null,
+                'issued_at' => now(),
+            ]);
+
+            $invoice->credited_minor += $amountMinor;
+            $this->settle($invoice);
+
+            $this->audit->record('invoice.rounding_written_off', $invoice,
+                new: ['credit_note' => $note->credit_note_number, 'amount_minor' => $amountMinor, 'zoho_total_minor' => $zohoTotalMinor],
+                organisation: $invoice->organisation);
+
+            return $note;
+        });
+    }
+
+    /**
      * Run follow-up work (sending to Zoho) without letting its failure
      * escape. With a synchronous queue the job runs inline; its own failed()
      * handler has already recorded the error on the record.

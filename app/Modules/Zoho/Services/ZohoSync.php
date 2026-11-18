@@ -7,6 +7,7 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Billing\Models\CreditNote;
 use App\Modules\Billing\Models\Invoice;
 use App\Modules\Billing\Models\Payment;
+use App\Modules\Billing\Services\InvoiceService;
 use App\Modules\Billing\Services\PaymentService;
 use App\Modules\Billing\Support\Money;
 use App\Modules\Notifications\NotificationEvents;
@@ -581,11 +582,27 @@ class ZohoSync
         $balance = Money::parse($remote['balance']);
         $problems = [];
 
-        if ($total !== $invoice->total_minor) {
+        // A few paise apart is GST rounding, not a real difference: Zoho Books
+        // is the accounting record. (+) ours is higher, (-) Zoho's is higher.
+        $rounding = $invoice->total_minor - $total;
+        $isRounding = $rounding !== 0 && abs($rounding) <= (int) config('wcc.billing.rounding_tolerance_minor', 100);
+
+        // Paid in full in Zoho, a rounding remainder still open here: close it.
+        if ($isRounding && $rounding > 0 && $balance === 0 && $remote['status'] === 'paid'
+            && $invoice->isOpen() && $invoice->balance_minor > 0 && $invoice->balance_minor <= $rounding) {
+            app(InvoiceService::class)->writeOffRounding($invoice, $invoice->balance_minor, $total);
+            $invoice->refresh();
+        }
+
+        if ($total !== $invoice->total_minor && ! $isRounding) {
             $problems[] = 'Zoho total '.Money::format($total).' differs from '.Money::format($invoice->total_minor).' here (check the GST tax and rounding settings in Zoho Books).';
         }
 
-        $expectedBalance = $invoice->status === Invoice::VOID ? 0 : $invoice->balance_minor;
+        $expectedBalance = match (true) {
+            $invoice->status === Invoice::VOID, $invoice->status === Invoice::PAID => 0,
+            $isRounding => max(0, $invoice->balance_minor - $rounding),
+            default => $invoice->balance_minor,
+        };
 
         if ($remote['status'] !== 'void' && $balance !== $expectedBalance) {
             $problems[] = 'Zoho balance '.Money::format($balance).' differs from '.Money::format($expectedBalance).' here.';

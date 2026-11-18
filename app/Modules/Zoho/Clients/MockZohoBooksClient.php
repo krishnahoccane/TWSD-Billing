@@ -2,6 +2,7 @@
 
 namespace App\Modules\Zoho\Clients;
 
+use App\Modules\Billing\Support\GstState;
 use App\Modules\Billing\Support\Money;
 use App\Modules\Zoho\Contracts\ZohoBooksClientInterface;
 use App\Modules\Zoho\Exceptions\ZohoException;
@@ -12,8 +13,8 @@ use Throwable;
  * It makes NO network calls; nothing it does reaches Zoho. Invoice links
  * point at a "mock" page, not a real payment page.
  *
- * Totals are computed like Zoho's line-level tax: per line,
- * round(rate × quantity × tax%) — so a correctly built invoice matches.
+ * Totals are computed like Zoho's line-level tax: CGST + SGST (half the
+ * rate each) or IGST, rounded per line — so a correctly built invoice matches.
  */
 class MockZohoBooksClient implements ZohoBooksClientInterface
 {
@@ -73,6 +74,14 @@ class MockZohoBooksClient implements ZohoBooksClientInterface
             'reference_number' => $reference,
             'invoices' => [['invoice_id' => $invoiceId, 'amount_applied' => $amount]],
         ])['payment_id'];
+    }
+
+    /** Make Zoho's total differ from ours (a rounding rule we do not match). */
+    public function overrideInvoiceTotal(string $invoiceId, string $total): void
+    {
+        $this->requireInvoice($invoiceId);
+        $this->invoices[$invoiceId]['total_minor'] = Money::parse($total);
+        $this->save();
     }
 
     /** @return array<string, mixed>|null */
@@ -211,13 +220,21 @@ class MockZohoBooksClient implements ZohoBooksClientInterface
         }
 
         $total = 0;
+        // Like Zoho: place of supply from the customer's GSTIN / state; CGST and
+        // SGST (half the rate each) or IGST, rounded per line.
+        $contact = $this->contacts[$invoice['customer_id']];
+        $supplier = config('wcc.billing.supplier_state_code');
+        $treatment = GstState::treatment(
+            $supplier === null ? null : (string) $supplier,
+            GstState::code($contact['gst_no'] ?? null, $contact['billing_address']['state'] ?? null),
+        );
 
         foreach ($invoice['line_items'] ?? [] as $line) {
             $rate = (string) $line['rate'];
             $amount = Money::parse(ltrim($rate, '-')) * (str_starts_with($rate, '-') ? -1 : 1) * (int) ($line['quantity'] ?? 1);
             // Any tax id is treated as the GST rate configured here.
             $percent = isset($line['tax_id']) ? Money::rateToBasisPoints((string) config('wcc.billing.default_tax_rate')) : 0;
-            $total += $amount + Money::divideRound($amount * $percent, 10000);
+            $total += $amount + GstState::lineTax($amount, $percent, $treatment)['tax'];
         }
 
         $id = $this->id('I');

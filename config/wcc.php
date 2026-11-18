@@ -61,6 +61,15 @@ return [
         'default_due_days' => (int) env('BILLING_DEFAULT_DUE_DAYS', 15),
         // Percentage, kept as a string so it is never handled as a float.
         'default_tax_rate' => (string) env('BILLING_DEFAULT_TAX_RATE', '18.00'),
+        // Your own GST state code (first two digits of your GSTIN, e.g. 36 =
+        // Telangana). A customer in the same state pays CGST + SGST (each half
+        // the rate, rounded per line, as Zoho Books does); any other state pays
+        // IGST. Unknown customer state = same state (Zoho's default).
+        'supplier_state_code' => env('BILLING_SUPPLIER_STATE_CODE'),
+        // Largest difference (paise) between our total and Zoho's that is
+        // treated as rounding: not flagged, and written off when Zoho shows
+        // the invoice paid.
+        'rounding_tolerance_minor' => (int) env('BILLING_ROUNDING_TOLERANCE_PAISE', 100),
         // prorate_daily (default) | full_month
         'proration_policy' => env('BILLING_PRORATION_POLICY', 'prorate_daily'),
         // {YY} / {YYYY} = calendar year of the issue date, {SEQ} = running number,

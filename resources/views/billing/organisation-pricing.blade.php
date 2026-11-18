@@ -38,7 +38,7 @@
 
         <x-ui.card title="Tax (GST)">
             <p class="text-sm">GST <span class="font-medium">{{ $taxRate }}%</span> on every invoice.</p>
-            <p class="muted mt-1 text-sm">Zoho Books splits it into CGST + SGST or IGST from the customer's place of supply.</p>
+            <p class="muted mt-1 text-sm">Charged as CGST + SGST when the organisation (by GSTIN, else its state) is in our own state, IGST otherwise — each rounded per line, as Zoho Books does.</p>
         </x-ui.card>
 
         <x-ui.card title="Mailbox price overrides" description="A different price for one mailbox. Takes precedence over the organisation price.">

@@ -17,6 +17,7 @@ use App\Modules\Billing\Services\BillingRunner;
 use App\Modules\Billing\Services\InvoiceService;
 use App\Modules\Billing\Services\PaymentService;
 use App\Modules\Billing\Services\PricingService;
+use App\Modules\Billing\Support\GstState;
 use App\Modules\Billing\Support\Money;
 use App\Modules\GoogleWorkspace\Enums\AccountStatus;
 use App\Modules\GoogleWorkspace\Enums\BillingStatus;
@@ -235,26 +236,44 @@ class BillingEngineTest extends WorkspaceTestCase
         $this->assertSame(25000, $this->generate($organisation)->subtotal_minor);
     }
 
-    public function test_gst_is_a_single_18_percent_figure_rounded_per_line(): void
+    public function test_gst_is_split_and_rounded_per_line_like_zoho_books(): void
     {
+        config(['wcc.billing.supplier_state_code' => '36']);
         $sameState = $this->organisation(9995, ['gstin' => '36AAAAA0000A1Z5']);
         $otherState = $this->organisation(9995, ['gstin' => '27AAAAA0000A1Z5']);
+        $byStateName = $this->organisation(9995, ['gstin' => null, 'state' => 'Maharashtra']);
         foreach (['one', 'two', 'three'] as $name) {
             $this->mailbox($sameState, "{$name}@same.test");
         }
         $this->mailbox($otherState, 'one@other.test');
+        $this->mailbox($byStateName, 'one@name.test');
 
-        // 99.95 × 18% = 17.991 -> 17.99 per line; three lines = 53.97.
+        // Same state: 99.95 × 9% = 8.9955 -> 9.00 CGST + 9.00 SGST per line; three lines = 54.00.
         $a = $this->generate($sameState);
-        $this->assertSame(['gst', 1800, 5397, 0, 0, 0], [$a->tax_treatment, $a->tax_rate_bp, $a->tax_minor, $a->cgst_minor, $a->sgst_minor, $a->igst_minor]);
+        $this->assertSame(['intra_state', 1800, 5400, 2700, 2700, 0], [$a->tax_treatment, $a->tax_rate_bp, $a->tax_minor, $a->cgst_minor, $a->sgst_minor, $a->igst_minor]);
         $this->assertSame($a->tax_minor, (int) $a->items()->sum('tax_minor'));
         $this->assertSame($a->subtotal_minor + $a->tax_minor, $a->total_minor);
 
-        // The state of the customer makes no difference here; Zoho Books splits it.
+        // Other state: 99.95 × 18% = 17.991 -> 17.99 IGST.
         $b = $this->generate($otherState);
-        $this->assertSame(['gst', 1799, 0, 0, 0], [$b->tax_treatment, $b->tax_minor, $b->cgst_minor, $b->sgst_minor, $b->igst_minor]);
+        $this->assertSame(['inter_state', 1799, 0, 0, 1799], [$b->tax_treatment, $b->tax_minor, $b->cgst_minor, $b->sgst_minor, $b->igst_minor]);
+        $this->assertSame('inter_state', $this->generate($byStateName)->tax_treatment);
 
-        $this->actingAs($this->admin)->get(route('invoices.show', $a))->assertOk()->assertSee('GST 18.00%')->assertDontSee('CGST')->assertDontSee('IGST');
+        $this->actingAs($this->admin)->get(route('invoices.show', $a))->assertOk()->assertSee('CGST 9.00%')->assertSee('SGST 9.00%')->assertDontSee('IGST');
+        $this->get(route('invoices.show', $b))->assertOk()->assertSee('IGST 18.00%')->assertDontSee('CGST');
+    }
+
+    public function test_the_reported_case_matches_zoho_books(): void
+    {
+        // ₹72 a month, 17 of 31 days = 39.48. Zoho: CGST 3.55 + SGST 3.55 = 46.58 (a single 18% would give 7.11 and 46.59).
+        $this->assertSame(['cgst' => 355, 'sgst' => 355, 'igst' => 0, 'tax' => 710], GstState::lineTax(3948, 1800, GstState::INTRA));
+        $this->assertSame(711, GstState::lineTax(3948, 1800, GstState::INTER)['tax']);
+        $this->assertSame('36', GstState::code(null, 'telangana'));
+        $this->assertSame('07', GstState::code(null, 'New Delhi'));
+        $this->assertSame('27', GstState::code('27AAAAA0000A1Z5', 'Telangana'));
+        $this->assertSame(GstState::INTRA, GstState::treatment(null, '27'));       // supplier state not configured
+        $this->assertSame(GstState::INTRA, GstState::treatment('36', null));       // customer state unknown
+        $this->assertSame(GstState::INTER, GstState::treatment('36', null, 'AE')); // outside India
     }
 
     public function test_the_gst_rate_is_the_same_for_every_organisation(): void
@@ -654,7 +673,7 @@ class BillingEngineTest extends WorkspaceTestCase
             ->assertSessionHasErrorsIn('override', 'email');
         $this->post(route('pricing.organisations.overrides.store', $organisation), ['email' => 'box@acme.test', 'price' => '100', 'effective_from' => '2026-03-01', 'reason' => 'Promo'])
             ->assertSessionHasNoErrors();
-        $this->get(route('pricing.organisations.show', $organisation))->assertOk()->assertSee('box@acme.test')->assertSee('Zoho Books splits it');
+        $this->get(route('pricing.organisations.show', $organisation))->assertOk()->assertSee('box@acme.test')->assertSee('each rounded per line');
 
         // Only a completed month can be billed.
         $this->post('/billing/cycles', ['month' => '2026-11'])->assertSessionHasErrors('month');
@@ -695,7 +714,8 @@ class BillingEngineTest extends WorkspaceTestCase
             ->assertJsonPath('data.0.id', $mine->uuid)->assertJsonPath('data.0.total', '295.00')->assertJsonPath('data.0.balance', '195.00');
         $this->getJson('/api/v1/invoices/'.$mine->uuid)->assertOk()
             ->assertJsonPath('data.items.0.account_email', 'box@a.test')->assertJsonPath('data.items.0.unit_price', '250.00')
-            ->assertJsonPath('data.tax_treatment', 'gst')->assertJsonPath('data.tax_rate_percent', '18.00');
+            ->assertJsonPath('data.tax_treatment', 'intra_state')->assertJsonPath('data.tax_rate_percent', '18.00')
+            ->assertJsonPath('data.cgst', '22.50')->assertJsonPath('data.sgst', '22.50')->assertJsonPath('data.igst', '0.00');
         $this->getJson('/api/v1/invoices/'.$theirs->uuid)->assertNotFound();
         $this->getJson('/api/v1/invoices/'.$draft->uuid)->assertNotFound();
         $this->getJson('/api/v1/payments')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.amount', '100.00');

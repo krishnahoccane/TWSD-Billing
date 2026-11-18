@@ -107,6 +107,8 @@ class PaymentService
             }
 
             $total = array_sum(array_map(fn (array $row) => $row[1], $allocations));
+            $tolerance = (int) config('wcc.billing.rounding_tolerance_minor', 100);
+            $rounding = 0;
 
             $payment = Payment::query()->create([
                 'organisation_id' => $organisation->getKey(),
@@ -138,14 +140,25 @@ class PaymentService
                 $invoice->amount_paid_minor += $applied;
                 $this->invoices->settle($invoice);
                 $payment->unallocated_minor -= $applied;
+
+                // Zoho's total was a few paise higher (GST rounding) and Zoho
+                // applied all of it to this invoice: the excess settled that
+                // invoice in Zoho, so it is not left here as credit.
+                $excess = $amount - $applied;
+
+                if ($excess > 0 && $excess <= $tolerance && $invoice->status === Invoice::PAID) {
+                    $payment->unallocated_minor -= $excess;
+                    $rounding += $excess;
+                }
             }
 
             $payment->save();
 
-            $this->audit->record('payment.recorded', $payment, new: [
+            $this->audit->record('payment.recorded', $payment, new: array_filter([
                 'amount_minor' => $total, 'source' => $source, 'external_id' => $externalId,
                 'unallocated_minor' => $payment->unallocated_minor,
-            ], organisation: $organisation);
+                'rounding_minor' => $rounding ?: null,
+            ], fn ($value) => $value !== null), organisation: $organisation);
 
             app(NotificationEvents::class)->paymentReceived($payment);
 

@@ -56,9 +56,17 @@ line tax    = round_half_up( line amount × tax rate )
 
 ## GST *(decided, D-09)*
 
-- One rate for every organisation: `BILLING_DEFAULT_TAX_RATE` = **18%**, shown as a single "GST 18%" figure.
-- Calculated per line (round half up) and summed.
-- The CGST + SGST / IGST split is made by **Zoho Books** from the customer's place of supply.
+- One rate for every organisation: `BILLING_DEFAULT_TAX_RATE` = **18%**.
+- Calculated **the way Zoho Books does it** (2026-11-18), so both systems reach the same total:
+  - customer in our state (`BILLING_SUPPLIER_STATE_CODE`, compared with the GSTIN's first two digits, else the
+    organisation's state name; unknown = same state): **CGST 9% + SGST 9%, each rounded half up per line**;
+  - other state or outside India: **IGST 18%**, rounded half up per line.
+  - Example: ₹39.48 → CGST 3.55 + SGST 3.55 = ₹46.58 (a single 18% would round to 7.11 and ₹46.59).
+- Invoices issued before this change show a single "GST 18%" figure (`tax_treatment = gst`).
+- **Rounding safety net:** a difference from Zoho's total of up to `BILLING_ROUNDING_TOLERANCE_PAISE` (₹1) is not
+  flagged. When Zoho shows the invoice paid and a remainder that small is open here, it is closed by an automatic
+  "GST rounding difference" credit note (audited, not sent to Zoho). If Zoho's total was higher, the extra paise of
+  the payment are not kept as credit. Larger differences are still flagged "Differs from Zoho".
 - Not handled here: SAC codes (set on the Zoho item), reverse charge, exemptions, TDS, e-invoicing.
 
 ## Invoices

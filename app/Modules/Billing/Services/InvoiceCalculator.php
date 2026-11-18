@@ -5,6 +5,7 @@ namespace App\Modules\Billing\Services;
 use App\Modules\Billing\Exceptions\BillingException;
 use App\Modules\Billing\Models\AccountBillingPeriod;
 use App\Modules\Billing\Models\BillingAdjustment;
+use App\Modules\Billing\Support\GstState;
 use App\Modules\Billing\Support\Money;
 use App\Modules\GoogleWorkspace\Models\GoogleAccount;
 use App\Modules\Organisations\Models\Organisation;
@@ -20,8 +21,10 @@ use Carbon\CarbonImmutable;
  * splits the mailbox into one line per price. "full_month" charges the
  * whole price for any mailbox billable on at least one day.
  *
- * GST is one rate (18% by default), calculated per line (round half up)
- * and summed. Zoho Books splits it into CGST/SGST or IGST.
+ * GST is one rate (18% by default), split and rounded the way Zoho Books
+ * does it: within the supplier's state CGST and SGST are each half the rate
+ * and each rounded half up per line (₹39.48 → 3.55 + 3.55 = 7.10, not 7.11);
+ * otherwise IGST at the full rate, rounded per line. Lines are summed.
  */
 class InvoiceCalculator
 {
@@ -34,6 +37,8 @@ class InvoiceCalculator
         $daysInPeriod = (int) $start->diffInDays($end) + 1;
         $policy = (string) config('wcc.billing.proration_policy', 'prorate_daily');
         $rate = $this->taxRate($organisation);
+        $treatment = $this->taxTreatment($organisation);
+        $cgst = $sgst = $igst = 0;
 
         $periods = AccountBillingPeriod::query()
             ->where('organisation_id', $organisation->getKey())
@@ -70,7 +75,11 @@ class InvoiceCalculator
             foreach ($this->segments(array_keys($billable), (int) $accountId, $prices, $account->primary_email) as $segment) {
                 $days = $policy === 'full_month' ? $daysInPeriod : $segment['days'];
                 $amount = Money::divideRound($segment['price'] * $days, $daysInPeriod);
-                $tax = Money::divideRound($amount * $rate, 10000);
+                $split = GstState::lineTax($amount, $rate, $treatment);
+                $tax = $split['tax'];
+                $cgst += $split['cgst'];
+                $sgst += $split['sgst'];
+                $igst += $split['igst'];
 
                 $lines[] = [
                     'type' => 'mailbox',
@@ -116,7 +125,11 @@ class InvoiceCalculator
                 continue;
             }
 
-            $lineTax = $adjustment->taxable ? Money::divideRound($signed * $rate, 10000) : 0;
+            $split = GstState::lineTax($signed, $adjustment->taxable ? $rate : 0, $treatment);
+            $lineTax = $split['tax'];
+            $cgst += $split['cgst'];
+            $sgst += $split['sgst'];
+            $igst += $split['igst'];
 
             $lines[] = [
                 'type' => 'adjustment',
@@ -142,30 +155,36 @@ class InvoiceCalculator
                 'adjustments_minor' => $adjustmentsTotal,
                 'taxable_minor' => $subtotal + $adjustmentsTotal,
                 'tax_rate_bp' => $rate,
-                'tax_treatment' => 'gst',
-                'cgst_minor' => 0,
-                'sgst_minor' => 0,
-                'igst_minor' => 0,
+                'tax_treatment' => $treatment,
+                'cgst_minor' => $cgst,
+                'sgst_minor' => $sgst,
+                'igst_minor' => $igst,
                 'tax_minor' => $tax,
                 'total_minor' => $subtotal + $adjustmentsTotal + $tax,
             ],
         ];
     }
 
-    /**
-     * One GST rate for every organisation (BILLING_DEFAULT_TAX_RATE, 18%).
-     * The CGST/SGST/IGST split is made by Zoho Books from the customer's
-     * place of supply; this application shows a single GST figure.
-     */
+    /** One GST rate for every organisation (BILLING_DEFAULT_TAX_RATE, 18%). */
     public function taxRate(Organisation $organisation): int
     {
         return Money::rateToBasisPoints((string) config('wcc.billing.default_tax_rate'));
     }
 
-    /** Always a single GST figure here (decision D-09). */
+    /**
+     * intra_state (CGST + SGST) or inter_state (IGST), from the customer's
+     * GSTIN or state against BILLING_SUPPLIER_STATE_CODE — the same place-of-
+     * supply rule Zoho Books applies, so both systems arrive at the same tax.
+     */
     public function taxTreatment(Organisation $organisation): string
     {
-        return 'gst';
+        $supplier = config('wcc.billing.supplier_state_code');
+
+        return GstState::treatment(
+            $supplier === null ? null : (string) $supplier,
+            GstState::code($organisation->gstin, $organisation->state),
+            $organisation->country,
+        );
     }
 
     /**

@@ -108,5 +108,7 @@ Zoho** (a credit note to mirror by hand).
 - Whether line items need `item_id`; whether negative-rate lines (credit adjustments) are accepted — if not, the
   invoice shows "Sync failed" with Zoho's message.
 - `gst_treatment` values `business_gst` / `business_none`, and whether `place_of_supply` must be sent.
-- Zoho's tax rounding equals ours (per line, half up). If not, the invoice shows "Differs from Zoho".
+- Zoho's tax rounding equals ours (CGST and SGST each per line, half up — matches a real single-line invoice; not yet
+  checked on an invoice with several mailboxes). Up to ₹1 apart is treated as rounding (see BILLING_ENGINE.md);
+  more shows "Differs from Zoho".
 - The webhook signature construction; the custom-header token is the reliable option.

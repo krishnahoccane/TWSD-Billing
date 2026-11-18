@@ -124,7 +124,14 @@
                 @if ($invoice->adjustments_minor !== 0)
                     <div class="flex justify-between"><dt class="muted">Adjustments</dt><dd class="tabular-nums">{{ Money::format($invoice->adjustments_minor, $c) }}</dd></div>
                 @endif
-                <div class="flex justify-between"><dt class="muted">GST {{ Money::decimal($invoice->tax_rate_bp) }}%</dt><dd class="tabular-nums">{{ Money::format($invoice->tax_minor, $c) }}</dd></div>
+                @if ($invoice->tax_treatment === 'intra_state')
+                    <div class="flex justify-between"><dt class="muted">CGST {{ Money::decimal(intdiv($invoice->tax_rate_bp, 2)) }}%</dt><dd class="tabular-nums">{{ Money::format($invoice->cgst_minor, $c) }}</dd></div>
+                    <div class="flex justify-between"><dt class="muted">SGST {{ Money::decimal(intdiv($invoice->tax_rate_bp, 2)) }}%</dt><dd class="tabular-nums">{{ Money::format($invoice->sgst_minor, $c) }}</dd></div>
+                @elseif ($invoice->tax_treatment === 'inter_state')
+                    <div class="flex justify-between"><dt class="muted">IGST {{ Money::decimal($invoice->tax_rate_bp) }}%</dt><dd class="tabular-nums">{{ Money::format($invoice->igst_minor, $c) }}</dd></div>
+                @else
+                    <div class="flex justify-between"><dt class="muted">GST {{ Money::decimal($invoice->tax_rate_bp) }}%</dt><dd class="tabular-nums">{{ Money::format($invoice->tax_minor, $c) }}</dd></div>
+                @endif
                 <div class="flex justify-between border-t border-zinc-200 pt-1 font-semibold dark:border-zinc-800"><dt>Total</dt><dd class="tabular-nums">{{ Money::format($invoice->total_minor, $c) }}</dd></div>
                 @if ($invoice->amount_paid_minor > 0)
                     <div class="flex justify-between"><dt class="muted">Paid</dt><dd class="tabular-nums">-{{ Money::format($invoice->amount_paid_minor, $c) }}</dd></div>

@@ -497,6 +497,22 @@ made Alpine transitions look broken during the check; they work when the pane is
   clients updated. Not yet run against the live Zoho organisation.
 - Tests: `Zoho/ZohoCustomerLinkTest` (6, including access), numbering in `Billing/BillingEngineTest`.
 
+## GST calculated like Zoho Books (2026-11-18)
+
+- Reported: ₹39.48 + single 18% GST (7.1064 → 7.11) = ₹46.59 here; Zoho charged CGST 3.55 + SGST 3.55 = ₹46.58, so
+  after the customer paid the invoice stayed "partially paid" for ₹0.01.
+- `Billing/Support/GstState`: GST state codes, place-of-supply decision and per-line split. `InvoiceCalculator` now
+  stores `tax_treatment` `intra_state` (CGST + SGST, each half the rate rounded per line) or `inter_state` (IGST),
+  with `cgst_minor`/`sgst_minor`/`igst_minor` filled. New `BILLING_SUPPLIER_STATE_CODE` (unset = same state).
+  Invoice page and API show CGST/SGST or IGST; older invoices keep the single "GST" figure. The mock Zoho uses the
+  same rule.
+- Safety net (`BILLING_ROUNDING_TOLERANCE_PAISE`, default 100): Zoho totals within ₹1 of ours are not flagged; when Zoho
+  shows the invoice paid, an open remainder that small is closed by an automatic credit note
+  (`InvoiceService::writeOffRounding`, audited `invoice.rounding_written_off`, not sent to Zoho); if Zoho's total was
+  higher, the extra paise of the Zoho payment are not left as credit (`rounding_minor` in the payment audit row).
+  The existing ₹0.01 invoice is closed by the next hourly Zoho sync after deployment.
+- Tests: `Zoho/ZohoGstRoundingTest` (4), GST tests in `Billing/BillingEngineTest`. Decision D-28.
+
 ## Project status
 
 All seven phases are built. Remaining work before production is configuration and the first live tests: mail
