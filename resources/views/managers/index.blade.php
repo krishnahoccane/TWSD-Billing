@@ -31,7 +31,7 @@
                         {{ $assignment->user->is_active ? 'Active' : 'Deactivated' }}
                     </x-ui.badge>
                 </td>
-                <td class="muted whitespace-nowrap">{{ $assignment->created_at->format('d M Y') }}</td>
+                <td class="muted whitespace-nowrap">{{ $assignment->created_at->inDisplayTimezone()->format('d M Y') }}</td>
             </tr>
         @empty
             <tr><td colspan="5" class="!p-0">

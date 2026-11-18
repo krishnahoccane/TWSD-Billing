@@ -14,7 +14,7 @@
 
         @forelse ($logs as $log)
             <tr>
-                <td class="muted whitespace-nowrap">{{ $log->created_at->format('d M Y H:i:s') }}</td>
+                <td class="muted whitespace-nowrap">{{ $log->created_at->inDisplayTimezone()->format('d M Y H:i:s') }}</td>
                 <td><x-ui.badge :tone="$log->provider === 'google' ? 'info' : 'neutral'" :dot="false">{{ $log->provider }}</x-ui.badge></td>
                 <td class="font-mono text-xs">{{ $log->operation }}</td>
                 <td class="max-w-56 truncate">{{ $log->target ?? '—' }}</td>
@@ -41,7 +41,7 @@
                     <tbody>
                         @foreach ($zohoLogs as $log)
                             <tr>
-                                <td class="muted whitespace-nowrap">{{ $log->created_at->format('d M Y H:i:s') }}</td>
+                                <td class="muted whitespace-nowrap">{{ $log->created_at->inDisplayTimezone()->format('d M Y H:i:s') }}</td>
                                 <td><x-ui.badge :tone="$log->provider === 'zoho' ? 'info' : 'neutral'" :dot="false">{{ $log->provider }}</x-ui.badge></td>
                                 <td class="font-mono text-xs">{{ $log->operation }}</td>
                                 <td class="max-w-56 truncate">{{ $log->target ?? '—' }}</td>

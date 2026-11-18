@@ -68,7 +68,7 @@
                     <tbody>
                         @foreach ($history as $entry)
                             <tr>
-                                <td class="muted whitespace-nowrap">{{ $entry->created_at->format('d M Y H:i') }}</td>
+                                <td class="muted whitespace-nowrap">{{ $entry->created_at->inDisplayTimezone()->format('d M Y H:i') }}</td>
                                 <td>{{ ucfirst(str_replace('_', ' ', $entry->event)) }}</td>
                                 <td class="muted max-w-md break-words text-xs">{{ $entry->details['note'] ?? $entry->details['reason'] ?? $entry->details['error'] ?? '—' }}</td>
                                 <td class="muted">{{ $entry->user?->name ?? 'System' }}</td>

@@ -52,7 +52,7 @@
                 <td>{{ $domain->domain_type->label() }}</td>
                 <td><x-ui.badge :tone="$domain->status === 'active' ? 'success' : 'neutral'">{{ ucfirst($domain->status) }}</x-ui.badge></td>
                 <td><x-ui.badge :tone="$tone">{{ $label }}</x-ui.badge></td>
-                <td class="muted whitespace-nowrap">{{ $domain->created_at->format('d M Y') }}</td>
+                <td class="muted whitespace-nowrap">{{ $domain->created_at->inDisplayTimezone()->format('d M Y') }}</td>
             </tr>
         @empty
             <tr><td colspan="6" class="!p-0">

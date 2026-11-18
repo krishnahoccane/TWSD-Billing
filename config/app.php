@@ -65,7 +65,13 @@ return [
     |
     */
 
+    // Storage timezone: every timestamp in the database is UTC. Do not change
+    // it on a live database — existing rows carry no zone and would shift.
     'timezone' => 'UTC',
+
+    // Times are SHOWN in this zone (APP_TIMEZONE, e.g. Asia/Kolkata) through
+    // Carbon's inDisplayTimezone() macro (AppServiceProvider).
+    'display_timezone' => env('APP_TIMEZONE') ?: env('BILLING_TIMEZONE', 'Asia/Kolkata'),
 
     /*
     |--------------------------------------------------------------------------

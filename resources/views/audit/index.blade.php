@@ -21,7 +21,7 @@
 
         @forelse ($entries as $entry)
             <tr>
-                <td class="muted whitespace-nowrap" title="{{ $entry->created_at->toIso8601String() }}">{{ $entry->created_at->format('d M Y H:i:s') }}</td>
+                <td class="muted whitespace-nowrap" title="{{ $entry->created_at->toIso8601String() }}">{{ $entry->created_at->inDisplayTimezone()->format('d M Y H:i:s') }}</td>
                 <td class="font-mono text-xs">{{ $entry->action }}</td>
                 <td><div class="max-w-48 truncate">{{ $entry->user_email ?? 'System' }}</div>@if ($entry->user_role)<div class="muted text-xs">{{ $entry->user_role }}</div>@endif</td>
                 <td>{{ $entry->organisation?->name ?? '—' }}</td>

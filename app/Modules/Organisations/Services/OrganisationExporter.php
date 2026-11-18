@@ -62,7 +62,7 @@ class OrganisationExporter
     {
         return match ($column) {
             'status' => $organisation->status->value,
-            'created_at' => (string) $organisation->created_at?->toDateString(),
+            'created_at' => (string) $organisation->created_at?->inDisplayTimezone()->toDateString(),
             default => (string) $organisation->getAttribute($column),
         };
     }

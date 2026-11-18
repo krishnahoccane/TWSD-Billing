@@ -34,7 +34,7 @@
                 <td class="text-right tabular-nums">{{ $organisation->members_count }}</td>
                 <td class="text-right tabular-nums">{{ $organisation->domains_count }}</td>
                 <td class="muted">{{ collect([$organisation->city, $organisation->state])->filter()->implode(', ') ?: '—' }}</td>
-                <td class="muted whitespace-nowrap">{{ $organisation->created_at->format('d M Y') }}</td>
+                <td class="muted whitespace-nowrap">{{ $organisation->created_at->inDisplayTimezone()->format('d M Y') }}</td>
             </tr>
         @empty
             <tr>

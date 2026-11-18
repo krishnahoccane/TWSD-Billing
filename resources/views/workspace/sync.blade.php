@@ -40,7 +40,7 @@
 
         @forelse ($logs as $log)
             <tr>
-                <td class="muted whitespace-nowrap">{{ $log->started_at?->format('d M Y H:i') }}</td>
+                <td class="muted whitespace-nowrap">{{ $log->started_at?->inDisplayTimezone()->format('d M Y H:i') }}</td>
                 <td class="whitespace-nowrap">{{ str_replace('_', ' ', $log->type) }}</td>
                 <td>
                     <x-ui.badge :tone="$log->status === 'completed' ? 'success' : ($log->status === 'failed' ? 'danger' : 'info')">{{ ucfirst($log->status) }}</x-ui.badge>

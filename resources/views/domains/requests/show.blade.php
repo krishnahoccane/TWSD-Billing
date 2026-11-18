@@ -133,13 +133,13 @@
             <dl class="space-y-3 text-sm">
                 <div><dt class="muted text-xs">Domain</dt><dd class="font-medium">{{ $r->domain_name }}</dd></div>
                 <div><dt class="muted text-xs">Organisation</dt><dd>{{ $r->organisation?->name ?? '—' }}</dd></div>
-                <div><dt class="muted text-xs">Requested by</dt><dd>{{ $r->requester?->name ?? '—' }} · {{ $r->created_at->format('d M Y H:i') }}</dd></div>
+                <div><dt class="muted text-xs">Requested by</dt><dd>{{ $r->requester?->name ?? '—' }} · {{ $r->created_at->inDisplayTimezone()->format('d M Y H:i') }}</dd></div>
                 <div><dt class="muted text-xs">{{ $removal ? 'Reason' : 'Note' }}</dt><dd class="whitespace-pre-line break-words">{{ $r->request_note ?: '—' }}</dd></div>
                 @if ($r->decided_at)
-                    <div><dt class="muted text-xs">Decision</dt><dd>{{ $r->decider?->name ?? '—' }} · {{ $r->decided_at->format('d M Y H:i') }}</dd></div>
+                    <div><dt class="muted text-xs">Decision</dt><dd>{{ $r->decider?->name ?? '—' }} · {{ $r->decided_at->inDisplayTimezone()->format('d M Y H:i') }}</dd></div>
                 @endif
                 @if ($r->verified_at)
-                    <div><dt class="muted text-xs">Verified</dt><dd>{{ $r->verified_at->format('d M Y H:i') }}</dd></div>
+                    <div><dt class="muted text-xs">Verified</dt><dd>{{ $r->verified_at->inDisplayTimezone()->format('d M Y H:i') }}</dd></div>
                 @endif
             </dl>
         </x-ui.card>
@@ -152,7 +152,7 @@
                         <tbody>
                             @foreach ($r->verificationChecks as $check)
                                 <tr>
-                                    <td class="muted whitespace-nowrap">{{ $check->created_at->format('d M Y H:i') }}</td>
+                                    <td class="muted whitespace-nowrap">{{ $check->created_at->inDisplayTimezone()->format('d M Y H:i') }}</td>
                                     <td>{{ ['dns_txt' => 'Public DNS lookup', 'google_verify' => 'Google ownership verification', 'google_domain' => 'Domain in Google Workspace'][$check->type] ?? $check->type }}</td>
                                     <td><x-ui.badge :tone="$check->result === 'pass' ? 'success' : 'warning'">{{ $check->result === 'pass' ? 'Passed' : 'Not found' }}</x-ui.badge></td>
                                     <td class="muted">{{ $check->checker?->name ?? 'System' }}</td>
@@ -170,7 +170,7 @@
                         <tbody>
                             @foreach ($r->history as $entry)
                                 <tr>
-                                    <td class="muted whitespace-nowrap">{{ $entry->created_at->format('d M Y H:i') }}</td>
+                                    <td class="muted whitespace-nowrap">{{ $entry->created_at->inDisplayTimezone()->format('d M Y H:i') }}</td>
                                     <td>{{ ucfirst(str_replace('_', ' ', $entry->event)) }}</td>
                                     <td class="muted max-w-md break-words text-xs">{{ $entry->details['note'] ?? $entry->details['reason'] ?? $entry->details['error'] ?? '—' }}</td>
                                     <td class="muted">{{ $entry->user?->name ?? 'System' }}</td>

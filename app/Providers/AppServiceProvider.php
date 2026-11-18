@@ -3,6 +3,9 @@
 namespace App\Providers;
 
 use App\Modules\Installer\Support\InstallState;
+use Carbon\Carbon;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\URL;
@@ -21,6 +24,16 @@ class AppServiceProvider extends ServiceProvider
         // Surface N+1 queries, silently discarded attributes and missing
         // attributes during development and tests.
         Model::shouldBeStrict(! $this->app->isProduction());
+
+        // Timestamps are stored in UTC and shown in APP_TIMEZONE.
+        $display = function (): CarbonInterface {
+            /** @var CarbonInterface $this */
+            $zone = (string) config('app.display_timezone') ?: 'UTC';
+
+            return $this->copy()->setTimezone(in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC');
+        };
+        Carbon::macro('inDisplayTimezone', $display);
+        CarbonImmutable::macro('inDisplayTimezone', $display);
 
         Password::defaults(function () {
             $rule = Password::min(12)->letters()->mixedCase()->numbers()->symbols();

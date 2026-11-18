@@ -44,7 +44,7 @@ class AuditLogController extends Controller
             $query->limit(50000)->chunk(1000, function ($entries) use ($out) {
                 foreach ($entries as $entry) {
                     fputcsv($out, array_map(fn ($value) => OrganisationExporter::cell((string) $value), [
-                        $entry->created_at?->toDateTimeString(), $entry->action, $entry->status, $entry->user_email, $entry->user_role,
+                        $entry->created_at?->inDisplayTimezone()->toDateTimeString(), $entry->action, $entry->status, $entry->user_email, $entry->user_role,
                         $entry->organisation?->name, $entry->resource_type, $entry->resource_id, $entry->ip_address, $entry->request_id,
                     ]));
                 }

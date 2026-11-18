@@ -162,7 +162,7 @@
                                                     {{ $domain->verification_status === 'unverified' ? 'Not checked with Google' : ucfirst($domain->verification_status) }}
                                                 </x-ui.badge>
                                             </td>
-                                            <td class="muted whitespace-nowrap">{{ $domain->created_at->format('d M Y') }}</td>
+                                            <td class="muted whitespace-nowrap">{{ $domain->created_at->inDisplayTimezone()->format('d M Y') }}</td>
                                         </tr>
                                     @endforeach
                                 </tbody>

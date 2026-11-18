@@ -14,7 +14,7 @@
         <x-slot:head><th>Failed at</th><th>Queue</th><th>Job</th><th>Error</th><th></th></x-slot:head>
         @forelse ($failed as $job)
             <tr>
-                <td class="muted whitespace-nowrap">{{ \Illuminate\Support\Carbon::parse($job->failed_at)->format('d M Y H:i') }}</td>
+                <td class="muted whitespace-nowrap">{{ \Illuminate\Support\Carbon::parse($job->failed_at, 'UTC')->inDisplayTimezone()->format('d M Y H:i') }}</td>
                 <td>{{ $job->queue }}</td>
                 <td class="font-mono text-xs">{{ $job->job }}</td>
                 <td class="max-w-md break-words text-xs">{{ $job->error }}</td>

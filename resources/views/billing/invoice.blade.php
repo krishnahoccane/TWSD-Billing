@@ -157,7 +157,7 @@
                     @endforeach
                     @foreach ($invoice->creditNotes as $note)
                         <tr>
-                            <td>Credit note {{ $note->credit_note_number }} · {{ $note->issued_at->format('d M Y') }}</td>
+                            <td>Credit note {{ $note->credit_note_number }} · {{ $note->issued_at->inDisplayTimezone()->format('d M Y') }}</td>
                             <td class="muted">{{ $note->reason }}</td>
                             <td class="text-right tabular-nums">{{ Money::format($note->amount_minor, $c) }}</td>
                         </tr>

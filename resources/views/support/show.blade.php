@@ -6,12 +6,12 @@
     </x-slot:actions>
 
     <div class="max-w-3xl space-y-6">
-        <x-ui.card :title="($item->user?->name ?? 'Someone').' · '.$item->created_at->format('d M Y H:i')">
+        <x-ui.card :title="($item->user?->name ?? 'Someone').' · '.$item->created_at->inDisplayTimezone()->format('d M Y H:i')">
             <p class="whitespace-pre-line break-words text-sm">{{ $item->message }}</p>
         </x-ui.card>
 
         @if ($item->response)
-            <x-ui.card :title="'Response · '.($item->responder?->name ?? 'Support').' · '.$item->responded_at?->format('d M Y H:i')">
+            <x-ui.card :title="'Response · '.($item->responder?->name ?? 'Support').' · '.$item->responded_at?->inDisplayTimezone()->format('d M Y H:i')">
                 <p class="whitespace-pre-line break-words text-sm">{{ $item->response }}</p>
             </x-ui.card>
         @endif

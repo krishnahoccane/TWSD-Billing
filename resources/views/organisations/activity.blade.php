@@ -15,7 +15,7 @@
 
         @forelse ($entries as $entry)
             <tr>
-                <td class="muted whitespace-nowrap" title="{{ $entry->created_at->toIso8601String() }}">{{ $entry->created_at->format('d M Y H:i') }}</td>
+                <td class="muted whitespace-nowrap" title="{{ $entry->created_at->toIso8601String() }}">{{ $entry->created_at->inDisplayTimezone()->format('d M Y H:i') }}</td>
                 <td>{{ $entry->organisation?->name ?? '—' }}</td>
                 <td class="font-mono text-xs">{{ $entry->action }}</td>
                 <td>

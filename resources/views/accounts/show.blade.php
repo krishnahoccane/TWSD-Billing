@@ -33,7 +33,7 @@
         'Recovery phone' => $account->recovery_phone,
         'Billing' => $account->billing_status->label().(($billedFrom ?? $account->billable_from) ? ' from '.($billedFrom ?? $account->billable_from)->format('d M Y') : ''),
         'Billing stops' => $account->deletion_effective_date?->format('d M Y'),
-        'Created in Google' => $account->google_created_at?->format('d M Y H:i'),
+        'Created in Google' => $account->google_created_at?->inDisplayTimezone()->format('d M Y H:i'),
         'Last synced' => $account->last_synced_at?->diffForHumans(),
     ];
 @endphp
@@ -114,7 +114,7 @@
         @if ($account->missing_from_google_at)
             <x-ui.alert tone="danger">
                 This mailbox was not returned by Google Workspace in the full synchronisation of
-                {{ $account->missing_from_google_at->format('d M Y H:i') }}. It may have been deleted directly in Google.
+                {{ $account->missing_from_google_at->inDisplayTimezone()->format('d M Y H:i') }}. It may have been deleted directly in Google.
             </x-ui.alert>
         @endif
 
@@ -193,7 +193,7 @@
                         <tbody>
                             @foreach ($account->history->take(50) as $entry)
                                 <tr>
-                                    <td class="muted whitespace-nowrap">{{ $entry->created_at->format('d M Y H:i') }}</td>
+                                    <td class="muted whitespace-nowrap">{{ $entry->created_at->inDisplayTimezone()->format('d M Y H:i') }}</td>
                                     <td>
                                         {{ ucfirst(str_replace('_', ' ', $entry->event)) }}
                                         @if (! empty($entry->details['reason']))<div class="muted text-xs">{{ $entry->details['reason'] }}</div>@endif

@@ -544,6 +544,15 @@ made Alpine transitions look broken during the check; they work when the pane is
 - Tests: `WhatsApp/WhatsAppIntegrationTest` (6), `GoogleWorkspace/PasswordAndTwoStepTest` (5),
   `Billing/PaymentSuspensionTest` (6).
 
+## Time zone and key-file path (2026-11-19)
+
+- `APP_TIMEZONE` was ignored (`config/app.php` hard-coded UTC). The database keeps storing UTC (`app.timezone`,
+  unchanged so existing rows do not shift); times are now shown in `APP_TIMEZONE` (`app.display_timezone`, default
+  the billing timezone) through the Carbon macro `inDisplayTimezone()` in every view, the audit CSV and the
+  organisation export. Relative times ("5 minutes ago") were already correct.
+- `GOOGLE_SERVICE_ACCOUNT_JSON`: a relative path is resolved from the application folder, so web requests (cwd
+  `public/`) and the queue worker (cwd = application folder) read the same file. Use an absolute path.
+
 ## Project status
 
 All seven phases are built. Remaining work before production is configuration and the first live tests: mail
