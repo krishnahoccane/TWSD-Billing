@@ -138,7 +138,7 @@ Rules
    delegation to a dedicated admin user (`GOOGLE_WORKSPACE_DELEGATION_ENABLED=true`, `GOOGLE_ADMIN_EMAIL`).
    Note: Google documents that only a super administrator can undelete users.
 2. Create the service account, enable the Admin SDK API, grant the four scopes above.
-3. Put the key file on the server outside the web root; set `GOOGLE_SERVICE_ACCOUNT_JSON` to its path.
+3. Put the key file on the server outside the web root; set `GOOGLE_SERVICE_ACCOUNT_JSON` to its **absolute** path (a relative path is taken from the application folder, so web requests and the queue worker read the same file).
 4. Map every organisation's domains (Organisations → organisation → Domains).
 5. In a controlled window set `GOOGLE_WORKSPACE_ENABLED=true`, open **Integrations → Google Workspace**, confirm the
    checklist is green and run **Test connection** (a read of one user).
