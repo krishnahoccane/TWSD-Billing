@@ -63,7 +63,10 @@ return [
         'default_tax_rate' => (string) env('BILLING_DEFAULT_TAX_RATE', '18.00'),
         // prorate_daily (default) | full_month
         'proration_policy' => env('BILLING_PRORATION_POLICY', 'prorate_daily'),
-        'invoice_prefix' => env('BILLING_INVOICE_PREFIX', 'INV-'),
+        // {YY} / {YYYY} = calendar year of the issue date, {SEQ} = running number,
+        // restarting at 1 each year. Default gives 26/TWSD-001.
+        'invoice_number_format' => env('BILLING_INVOICE_NUMBER_FORMAT', '{YY}/TWSD-{SEQ}'),
+        'invoice_number_padding' => (int) env('BILLING_INVOICE_NUMBER_PADDING', 3),
         'credit_note_prefix' => env('BILLING_CREDIT_NOTE_PREFIX', 'CN-'),
         // Super Admins (payments.reconcile) may record offline payments they
         // have verified, such as bank transfers. They are pushed to Zoho Books.

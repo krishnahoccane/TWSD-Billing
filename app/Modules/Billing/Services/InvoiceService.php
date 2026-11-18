@@ -19,6 +19,7 @@ use App\Modules\Zoho\Services\ZohoSync;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -134,7 +135,7 @@ class InvoiceService
             $today = CarbonImmutable::now(config('wcc.billing.timezone'))->startOfDay();
 
             $invoice->forceFill([
-                'invoice_number' => $this->nextNumber('invoice', (string) config('wcc.billing.invoice_prefix', 'INV-')),
+                'invoice_number' => $this->nextInvoiceNumber($today),
                 'status' => $invoice->total_minor === 0 ? Invoice::PAID : Invoice::ISSUED,
                 'issue_date' => $today->toDateString(),
                 'due_date' => $today->addDays((int) config('wcc.billing.default_due_days'))->toDateString(),
@@ -307,19 +308,38 @@ class InvoiceService
         ]);
     }
 
-    private function nextNumber(string $sequence, string $prefix): string
+    /**
+     * Invoice number from BILLING_INVOICE_NUMBER_FORMAT, default "{YY}/TWSD-{SEQ}"
+     * (26/TWSD-001). {YY}/{YYYY} is the calendar year of the issue date; the
+     * sequence restarts at 1 whenever the text before {SEQ} changes, i.e.
+     * every new year. Numbers already issued are never renumbered.
+     */
+    private function nextInvoiceNumber(CarbonImmutable $issueDate): string
+    {
+        $format = (string) config('wcc.billing.invoice_number_format', '{YY}/TWSD-{SEQ}');
+        $format = str_contains($format, '{SEQ}') ? $format : $format.'{SEQ}';
+        $expand = fn (string $text) => str_replace(['{YYYY}', '{YY}'], [$issueDate->format('Y'), $issueDate->format('y')], $text);
+
+        $prefix = $expand(Str::before($format, '{SEQ}'));
+        $suffix = $expand(Str::after($format, '{SEQ}'));
+        $padding = max(1, (int) config('wcc.billing.invoice_number_padding', 3));
+
+        return $this->nextNumber(Str::limit('invoice:'.$prefix, 50, ''), $prefix, $padding).$suffix;
+    }
+
+    private function nextNumber(string $sequence, string $prefix, int $padding = 6): string
     {
         // Row lock: numbers are consecutive and never reused, even under concurrency.
         $row = DB::table('number_sequences')->where('name', $sequence)->lockForUpdate()->first();
 
         if ($row === null) {
-            DB::table('number_sequences')->insert(['name' => $sequence, 'prefix' => $prefix, 'padding' => 6, 'next_number' => 1, 'created_at' => now(), 'updated_at' => now()]);
+            DB::table('number_sequences')->insert(['name' => $sequence, 'prefix' => Str::limit($prefix, 20, ''), 'padding' => $padding, 'next_number' => 1, 'created_at' => now(), 'updated_at' => now()]);
             $row = DB::table('number_sequences')->where('name', $sequence)->lockForUpdate()->first();
         }
 
         DB::table('number_sequences')->where('name', $sequence)->update(['next_number' => $row->next_number + 1, 'updated_at' => now()]);
 
-        return $row->prefix.str_pad((string) $row->next_number, (int) $row->padding, '0', STR_PAD_LEFT);
+        return $prefix.str_pad((string) $row->next_number, (int) $row->padding, '0', STR_PAD_LEFT);
     }
 
     /**

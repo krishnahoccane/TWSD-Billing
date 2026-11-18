@@ -186,7 +186,8 @@ class ZohoIntegrationController extends Controller
 
         return response($client->invoicePdf($zohoId), 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="'.$invoice->invoice_number.'.pdf"',
+            // "26/TWSD-001" is not a valid file name.
+            'Content-Disposition' => 'inline; filename="'.str_replace(['/', '\\'], '-', (string) $invoice->invoice_number).'.pdf"',
             'Cache-Control' => 'private, no-store',
         ]);
     }

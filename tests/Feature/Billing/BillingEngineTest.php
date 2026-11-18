@@ -378,7 +378,7 @@ class BillingEngineTest extends WorkspaceTestCase
         $second = $this->issued($other);
         $third = $this->issued($organisation, '2026-05');
 
-        $this->assertSame(['INV-000001', 'INV-000002', 'INV-000003'], [$first->invoice_number, $second->invoice_number, $third->invoice_number]);
+        $this->assertSame(['26/TWSD-001', '26/TWSD-002', '26/TWSD-003'], [$first->invoice_number, $second->invoice_number, $third->invoice_number]);
         $this->assertSame(Invoice::ISSUED, $first->status);
         $this->assertSame('2026-11-17', $first->issue_date->toDateString());
         $this->assertSame('2026-12-02', $first->due_date->toDateString());   // +15 days
@@ -386,6 +386,21 @@ class BillingEngineTest extends WorkspaceTestCase
 
         $this->expectException(ValidationException::class);
         app(InvoiceService::class)->issue($first->fresh(), $this->admin);
+    }
+
+    public function test_invoice_numbering_restarts_each_year_and_follows_the_configured_format(): void
+    {
+        $organisation = $this->organisation(25000);
+        $this->mailbox($organisation, 'box@acme.test');
+
+        $this->assertSame('26/TWSD-001', $this->issued($organisation, '2026-04')->invoice_number);
+        $this->assertSame('26/TWSD-002', $this->issued($organisation, '2026-05')->invoice_number);
+
+        $this->travelTo('2027-01-05 10:00:00');
+        $this->assertSame('27/TWSD-001', $this->issued($organisation, '2026-12')->invoice_number);
+
+        config(['wcc.billing.invoice_number_format' => 'TWSD/{YYYY}/{SEQ}', 'wcc.billing.invoice_number_padding' => 4]);
+        $this->assertSame('TWSD/2027/0001', $this->issued($organisation, '2026-11')->invoice_number);
     }
 
     public function test_partial_payment_then_full_payment(): void

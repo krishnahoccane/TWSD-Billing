@@ -98,13 +98,15 @@ class ZohoBooksTest extends TestCase
         $mapping = $this->sync()->mapping($invoice);
         $this->assertSame(ZohoMapping::SYNCED, $mapping->sync_status);
         $this->assertNotNull($mapping->zoho_id);
-        $this->assertSame('INV-000001', $mapping->zoho_number);
+        $number = now(config('wcc.billing.timezone'))->format('y').'/TWSD-001';
+        $this->assertSame($number, $invoice->invoice_number);
+        $this->assertSame($number, $mapping->zoho_number);
         $this->assertSame('sent', $mapping->zoho_status);
         $this->assertSame(29500, $mapping->zoho_total_minor);
         $this->assertStringContainsString('mock-invoice', $mapping->zoho_url);
 
         $remote = $this->zoho()->rawInvoice($mapping->zoho_id);
-        $this->assertSame('INV-000001', $remote['invoice_number']);
+        $this->assertSame($number, $remote['invoice_number']);
         $this->assertSame($invoice->uuid, $remote['reference_number']);
         $this->assertSame('250.00', $remote['line_items'][0]['rate']);
         $this->assertStringContainsString('box@acme.test', $remote['line_items'][0]['description']);
