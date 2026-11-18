@@ -26,7 +26,21 @@ return [
         'enabled' => (bool) env('GOOGLE_WORKSPACE_ENABLED', false),
         'project_id' => env('GOOGLE_CLOUD_PROJECT_ID'),
         // Path to the service-account JSON key file, stored outside the web root.
-        'service_account_json' => env('GOOGLE_SERVICE_ACCOUNT_JSON'),
+        // Use an absolute path. A relative path is taken from the application
+        // folder (base_path()), never from the process's current directory —
+        // web requests run from public/ but queue workers and cron from the
+        // application folder, so a cwd-relative path works in one and not the other.
+        'service_account_json' => (static function (?string $path): ?string {
+            $path = trim((string) $path);
+
+            if ($path === '') {
+                return null;
+            }
+
+            $absolute = str_starts_with($path, '/') || str_starts_with($path, '\\') || preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1;
+
+            return $absolute ? $path : base_path($path);
+        })(env('GOOGLE_SERVICE_ACCOUNT_JSON')),
         'admin_email' => env('GOOGLE_ADMIN_EMAIL'),
         'customer_id' => env('GOOGLE_CUSTOMER_ID', 'my_customer'),
         'delegation_enabled' => (bool) env('GOOGLE_WORKSPACE_DELEGATION_ENABLED', false),

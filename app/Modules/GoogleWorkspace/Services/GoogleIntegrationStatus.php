@@ -42,7 +42,7 @@ class GoogleIntegrationStatus
             ['label' => 'Service-account key file (GOOGLE_SERVICE_ACCOUNT_JSON)', 'ok' => is_array($key) && ($key['type'] ?? null) === 'service_account',
                 'detail' => match (true) {
                     blank($path) => 'Not set',
-                    ! is_file($path) => 'File not found',
+                    ! is_file($path) => 'File not found at '.$path,
                     ! is_array($key) || ($key['type'] ?? null) !== 'service_account' => 'Not a service-account key',
                     default => 'Valid key file found',
                 }],
