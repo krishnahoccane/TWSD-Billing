@@ -41,6 +41,10 @@ enum Ability: string
     case AccountsExecutePermanentDeletion = 'accounts.permanent_delete.execute';
     case AccountsReassignOrganisation = 'accounts.reassign_organisation';
     case AccountsSync = 'accounts.sync';
+    case AccountsResetPassword = 'accounts.reset_password';
+    case AccountsManageSecurity = 'accounts.manage_security';
+    // Reactivate a mailbox suspended automatically for non-payment.
+    case AccountsReactivatePaymentSuspended = 'accounts.reactivate_payment_suspended';
 
     // Domains
     case DomainsView = 'domains.view';
@@ -67,6 +71,7 @@ enum Ability: string
     // Integrations
     case IntegrationsManageGoogle = 'integrations.google.manage';
     case IntegrationsManageZoho = 'integrations.zoho.manage';
+    case IntegrationsManageWhatsApp = 'integrations.whatsapp.manage';
     case IntegrationsViewLogs = 'integrations.logs.view';
 
     // Audit & support
@@ -111,6 +116,8 @@ enum Ability: string
             self::PaymentsReconcile,
             self::IntegrationsManageGoogle,
             self::IntegrationsManageZoho,
+            self::IntegrationsManageWhatsApp,
+            self::AccountsReactivatePaymentSuspended,
         ], true);
     }
 
@@ -140,6 +147,7 @@ enum Ability: string
             self::AccountsSync,
             self::IntegrationsManageGoogle,
             self::IntegrationsManageZoho,
+            self::IntegrationsManageWhatsApp,
             self::IntegrationsViewLogs,
             self::AuditViewTechnical,
             self::BillingRunCycles,

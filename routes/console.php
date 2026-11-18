@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Schedule;
 
 Schedule::job(new SyncGoogleAccountsJob)->everyFifteenMinutes()->withoutOverlapping();
 Schedule::job(new ReconcileGoogleAccountsJob)->everyThirtyMinutes()->withoutOverlapping();
-Schedule::job(new ImportGoogleDomainsJob)->everySixHours()->withoutOverlapping();
+Schedule::job(new ImportGoogleDomainsJob)->everyThirtyMinutes()->withoutOverlapping();
 Schedule::job(new ImportGoogleUsersJob)->dailyAt('02:30')->withoutOverlapping();
 
 /*
@@ -33,8 +33,8 @@ Schedule::job(new ImportGoogleUsersJob)->dailyAt('02:30')->withoutOverlapping();
 Schedule::job(new GenerateBillingCycleJob(autoIssue: true))->monthlyOn(1, '03:00')->timezone(config('wcc.billing.timezone'))->withoutOverlapping();
 
 // Zoho Books: fallback for webhooks — send pending invoices, push offline
-// payments, record Zoho payments, report differences. Hourly.
-Schedule::job(new ReconcileZohoPaymentJob)->hourlyAt(20)->withoutOverlapping();
+// payments, record Zoho payments, report differences. Every 30 minutes.
+Schedule::job(new ReconcileZohoPaymentJob)->everyThirtyMinutes()->withoutOverlapping();
 
 // One reminder per overdue invoice, the morning after its due date.
 Schedule::job(new SendOverdueInvoiceRemindersJob)->dailyAt('09:00')->timezone(config('wcc.billing.timezone'))->withoutOverlapping();
