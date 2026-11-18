@@ -104,6 +104,35 @@ class AccountController extends Controller
         return back()->with('success', 'Reactivation requested.');
     }
 
+    public function resetPassword(Request $request, GoogleAccount $account, GoogleAccountService $accounts): RedirectResponse
+    {
+        Gate::authorize('resetPassword', $account);
+
+        $data = $request->validateWithBag('password', [
+            'mode' => ['required', 'in:generate,manual'],
+            // Google accepts 8–100 printable ASCII characters.
+            'password' => ['required_if:mode,manual', 'nullable', 'string', 'min:8', 'max:100', 'regex:/^[\x21-\x7E]+$/', 'confirmed'],
+            'change_at_next_login' => ['nullable', 'boolean'],
+        ], ['password.regex' => 'Use letters, digits and symbols only (no spaces or accented characters).']);
+
+        $generate = $data['mode'] === 'generate';
+        $accounts->requestPasswordReset($account, $generate ? null : $data['password'], (bool) ($data['change_at_next_login'] ?? false), $request->user());
+
+        return back()->with('success', $generate
+            ? 'A new password is being set in Google. Reveal it once on this page when it is ready (within 24 hours).'
+            : 'The new password is being set in Google.');
+    }
+
+    public function turnOffTwoStepVerification(Request $request, GoogleAccount $account, GoogleAccountService $accounts): RedirectResponse
+    {
+        Gate::authorize('manageSecurity', $account);
+
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:500']]);
+        $accounts->requestTwoStepVerificationOff($account, $data['reason'], $request->user());
+
+        return back()->with('success', '2-Step Verification is being turned off in Google. The user can sign in with the password alone and enrol again.');
+    }
+
     public function softDelete(Request $request, GoogleAccount $account, GoogleAccountService $accounts): RedirectResponse
     {
         Gate::authorize('softDelete', $account);

@@ -11,6 +11,8 @@ use App\Modules\GoogleWorkspace\Enums\AccountOperation;
 use App\Modules\GoogleWorkspace\Enums\AccountStatus;
 use App\Modules\GoogleWorkspace\Enums\BillingStatus;
 use App\Modules\GoogleWorkspace\Exceptions\WorkspaceException;
+use App\Modules\GoogleWorkspace\Jobs\ResetGoogleUserPasswordJob;
+use App\Modules\GoogleWorkspace\Jobs\TurnOffTwoStepVerificationJob;
 use App\Modules\GoogleWorkspace\Jobs\UpdateGoogleUserJob;
 use App\Modules\GoogleWorkspace\Models\AccountDeletionRequest;
 use App\Modules\GoogleWorkspace\Models\GoogleAccount;
@@ -151,7 +153,65 @@ class GoogleAccountService
     {
         $this->requireStatus($account, [AccountStatus::Active], 'Only an active account can be suspended.');
 
-        $this->begin($account, AccountOperation::Suspend, ['suspension_reason' => $reason], 'suspension_requested', ['reason' => $reason], $actor);
+        $this->begin($account, AccountOperation::Suspend, ['suspension_reason' => $reason, 'suspension_type' => 'manual'], 'suspension_requested', ['reason' => $reason], $actor);
+    }
+
+    /**
+     * Automatic suspension for an unpaid invoice (PaymentSuspensionService).
+     * Recorded as suspension_type "non_payment" so that clearing the payment
+     * reactivates only these mailboxes, never manually suspended ones.
+     */
+    public function requestPaymentSuspension(GoogleAccount $account, string $reason): void
+    {
+        $this->requireStatus($account, [AccountStatus::Active], 'Only an active account can be suspended.');
+
+        $this->begin($account, AccountOperation::Suspend, ['suspension_reason' => $reason, 'suspension_type' => 'non_payment'],
+            'suspension_requested', ['reason' => $reason, 'type' => 'non_payment'], null);
+    }
+
+    /** Payment received: reactivate a mailbox this system suspended for non-payment. */
+    public function requestPaymentReactivation(GoogleAccount $account): void
+    {
+        $this->requireStatus($account, [AccountStatus::Suspended], 'Only a suspended account can be reactivated.');
+
+        if ($account->suspension_type !== 'non_payment') {
+            throw ValidationException::withMessages(['account' => 'This account was not suspended for non-payment.']);
+        }
+
+        $this->begin($account, AccountOperation::Reactivate, [], 'reactivation_requested', ['type' => 'payment_received'], null);
+    }
+
+    /**
+     * New password: generated (null, revealed once to $actor) or typed by
+     * $actor. Google can force a change at the next sign-in.
+     */
+    public function requestPasswordReset(GoogleAccount $account, #[\SensitiveParameter] ?string $password, bool $changeAtNextLogin, User $actor): void
+    {
+        $this->requireStatus($account, [AccountStatus::Active, AccountStatus::Suspended], 'The password can only be changed for an active or suspended account.');
+
+        if ($account->google_user_id === null) {
+            throw ValidationException::withMessages(['account' => 'This account has no Google user yet.']);
+        }
+
+        $details = ['generated' => $password === null, 'change_at_next_login' => $changeAtNextLogin];
+        $this->history->record($account, 'password_reset_requested', details: $details, actor: $actor);
+        $this->audit->record('account.password_reset_requested', $account, new: $details, organisation: $account->organisation, actor: $actor);
+
+        ResetGoogleUserPasswordJob::dispatch($account->getKey(), $actor->getKey(), ['password' => $password, 'change_at_next_login' => $changeAtNextLogin]);
+    }
+
+    public function requestTwoStepVerificationOff(GoogleAccount $account, string $reason, User $actor): void
+    {
+        $this->requireStatus($account, [AccountStatus::Active, AccountStatus::Suspended], '2-Step Verification can only be changed for an active or suspended account.');
+
+        if ($account->google_user_id === null) {
+            throw ValidationException::withMessages(['account' => 'This account has no Google user yet.']);
+        }
+
+        $this->history->record($account, 'two_step_verification_off_requested', details: ['reason' => $reason], actor: $actor);
+        $this->audit->record('account.two_step_verification_off_requested', $account, new: ['reason' => $reason], organisation: $account->organisation, actor: $actor);
+
+        TurnOffTwoStepVerificationJob::dispatch($account->getKey(), $actor->getKey());
     }
 
     public function requestReactivation(GoogleAccount $account, User $actor): void
@@ -400,7 +460,7 @@ class GoogleAccountService
      * @param  array<string, mixed>  $attributes
      * @param  array<string, mixed>  $details
      */
-    private function begin(GoogleAccount $account, AccountOperation $operation, array $attributes, string $event, array $details, User $actor): void
+    private function begin(GoogleAccount $account, AccountOperation $operation, array $attributes, string $event, array $details, ?User $actor): void
     {
         DB::transaction(function () use ($account, $operation, $attributes, $event, $details, $actor) {
             $from = $account->account_status;
@@ -411,7 +471,7 @@ class GoogleAccountService
                 'pending_operation' => $operation,
                 'pending_since' => now(),
                 'last_error' => null,
-                'updated_by' => $actor->getKey(),
+                'updated_by' => $actor?->getKey(),
             ])->save();
 
             $this->history->record($account, $event, $from, $operation->pendingStatus(), $details, $actor);
@@ -424,9 +484,9 @@ class GoogleAccountService
     /**
      * @param  array<string, mixed>  $payload
      */
-    private function dispatch(GoogleAccount $account, AccountOperation $operation, User $actor, array $payload = []): void
+    private function dispatch(GoogleAccount $account, AccountOperation $operation, ?User $actor, array $payload = []): void
     {
-        $operation->jobClass()::dispatch($account->getKey(), $actor->getKey(), $payload);
+        $operation->jobClass()::dispatch($account->getKey(), $actor?->getKey(), $payload);
     }
 
     /**

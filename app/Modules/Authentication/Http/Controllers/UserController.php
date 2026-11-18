@@ -9,6 +9,7 @@ use App\Modules\AccessControl\Enums\RoleName;
 use App\Modules\Authentication\Services\UserService;
 use DomainException;
 use Illuminate\Database\Eloquent\Builder;
+use App\Modules\WhatsApp\Services\PhoneNumber;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -56,13 +57,21 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'platform_role' => ['nullable', Rule::in(array_keys(self::platformRoles()))],
+            'phone' => ['nullable', 'string', 'max:32', 'regex:/^\+?[0-9 ()-]{10,24}$/'],
         ]);
+
+        $phone = filled($data['phone'] ?? null) ? PhoneNumber::normalise($data['phone']) : null;
+
+        if (filled($data['phone'] ?? null) && $phone === null) {
+            return back()->withErrors(['phone' => 'Enter a mobile number with country code, e.g. 919876543210.'], 'user')->withInput();
+        }
 
         $user = $users->create(
             $data['name'],
             $data['email'],
             $request->user(),
             isset($data['platform_role']) ? RoleName::from($data['platform_role']) : null,
+            $phone,
         );
 
         return redirect()->route('users.index')

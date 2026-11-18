@@ -69,6 +69,11 @@ class LoggingWorkspaceProvider implements WorkspaceProviderInterface
         $this->log('users.signOut', $userKey, fn () => $this->inner->signOutUser($userKey));
     }
 
+    public function turnOffTwoStepVerification(string $userKey): void
+    {
+        $this->log('users.twoStepVerification.turnOff', $userKey, fn () => $this->inner->turnOffTwoStepVerification($userKey));
+    }
+
     public function deleteUser(string $userKey): void
     {
         $this->log('users.delete', $userKey, fn () => $this->inner->deleteUser($userKey));

@@ -238,6 +238,7 @@ class GoogleDirectoryImporter
             'email_unique_key' => $remote->primaryEmail,
             'account_status' => $status,
             'is_suspended' => $remote->suspended,
+            'suspension_type' => $remote->suspended ? 'manual' : null,
             // Billing starts on the day the mailbox enters this system; earlier
             // periods are outside its records (see KNOWN_LIMITATIONS D-18).
             'billing_status' => $domain ? BillingStatus::Billable : BillingStatus::Pending,
@@ -285,9 +286,11 @@ class GoogleDirectoryImporter
             if ($from === AccountStatus::Active && $remote->suspended) {
                 $account->account_status = AccountStatus::Suspended;
                 $account->suspension_reason ??= 'Suspended directly in Google Workspace';
+                $account->suspension_type ??= 'manual';
             } elseif ($from === AccountStatus::Suspended && ! $remote->suspended) {
                 $account->account_status = AccountStatus::Active;
                 $account->suspension_reason = null;
+                $account->suspension_type = null;
             } elseif ($from === AccountStatus::SoftDeleted && ! $remote->suspended) {
                 // Not auto-corrected: someone re-enabled a deleted mailbox in Google.
                 $notes['warnings'][] = "{$remote->primaryEmail} is soft-deleted here but active in Google.";

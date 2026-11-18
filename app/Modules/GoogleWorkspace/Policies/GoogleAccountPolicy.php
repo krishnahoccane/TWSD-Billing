@@ -44,10 +44,27 @@ class GoogleAccountPolicy
 
     public function reactivate(User $user, GoogleAccount $account): bool
     {
+        // Suspended automatically for non-payment: only a Super Admin may
+        // reactivate by hand (paying the invoice reactivates it automatically).
+        if ($account->suspension_type === 'non_payment') {
+            return $this->allows($user, Ability::AccountsReactivatePaymentSuspended, $account);
+        }
+
         return $this->allows($user, Ability::AccountsReactivate, $account);
     }
 
     /** Stage 1 (reversible): managers may request it; it executes immediately (decision D-05). */
+    public function resetPassword(User $user, GoogleAccount $account): bool
+    {
+        return $this->allows($user, Ability::AccountsResetPassword, $account);
+    }
+
+    /** Turn off 2-Step Verification. */
+    public function manageSecurity(User $user, GoogleAccount $account): bool
+    {
+        return $this->allows($user, Ability::AccountsManageSecurity, $account);
+    }
+
     public function softDelete(User $user, GoogleAccount $account): bool
     {
         return $this->allows($user, Ability::AccountsRequestDeletion, $account)

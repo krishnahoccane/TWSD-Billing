@@ -29,6 +29,9 @@ enum NotificationType: string
     case DomainVerified = 'domain.verified';
     case InvoiceIssued = 'invoice.issued';
     case InvoiceOverdue = 'invoice.overdue';
+    case PaymentReminder = 'invoice.payment_reminder';
+    case AccountsSuspendedForNonPayment = 'billing.accounts_suspended';
+    case AccountsReactivatedAfterPayment = 'billing.accounts_reactivated';
     case PaymentReceived = 'payment.received';
     case PaymentReconciliationFailed = 'payment.reconciliation_failed';
     case GoogleIntegrationError = 'integration.google_error';
@@ -51,6 +54,9 @@ enum NotificationType: string
             self::DomainVerified => 'Domain verified and active',
             self::InvoiceIssued => 'Invoice issued',
             self::InvoiceOverdue => 'Invoice overdue',
+            self::PaymentReminder => 'Payment reminder',
+            self::AccountsSuspendedForNonPayment => 'Email accounts suspended for non-payment',
+            self::AccountsReactivatedAfterPayment => 'Email accounts reactivated after payment',
             self::PaymentReceived => 'Payment received',
             self::PaymentReconciliationFailed => 'Payment reconciliation problem',
             self::GoogleIntegrationError => 'Google Workspace integration error',
@@ -66,7 +72,8 @@ enum NotificationType: string
             self::AccountCreated, self::AccountCreationFailed, self::AccountSuspended,
             self::AccountReactivated, self::AccountDeletionRequested => Ability::AccountsView,
             self::DomainRequestApproved, self::DomainRequestRejected, self::DomainVerified => Ability::DomainsView,
-            self::InvoiceIssued, self::InvoiceOverdue, self::PaymentReceived => Ability::BillingView,
+            self::InvoiceIssued, self::InvoiceOverdue, self::PaymentReceived, self::PaymentReminder => Ability::BillingView,
+            self::AccountsSuspendedForNonPayment, self::AccountsReactivatedAfterPayment => Ability::AccountsView,
             default => null,
         };
     }
@@ -79,7 +86,7 @@ enum NotificationType: string
             self::AccountCreationFailed, self::GoogleIntegrationError => Ability::IntegrationsViewLogs,
             self::PaymentReconciliationFailed, self::ZohoIntegrationError => Ability::IntegrationsManageZoho,
             self::SupportRequestCreated => Ability::SupportManage,
-            self::InvoiceOverdue => Ability::PaymentsReconcile,
+            self::InvoiceOverdue, self::AccountsSuspendedForNonPayment, self::AccountsReactivatedAfterPayment => Ability::PaymentsReconcile,
             default => null,
         };
     }
@@ -94,11 +101,28 @@ enum NotificationType: string
     {
         return match ($this) {
             self::AccountCreationFailed, self::GoogleIntegrationError, self::ZohoIntegrationError,
-            self::PaymentReconciliationFailed, self::InvoiceOverdue => 'danger',
+            self::PaymentReconciliationFailed, self::InvoiceOverdue, self::AccountsSuspendedForNonPayment => 'danger',
+            self::PaymentReminder => 'warning',
             self::AccountSuspended, self::AccountDeletionRequested, self::PermanentDeletionRequested,
             self::DomainRequestRejected => 'warning',
-            self::PaymentReceived, self::DomainVerified, self::AccountCreated, self::DomainRequestApproved => 'success',
+            self::PaymentReceived, self::DomainVerified, self::AccountCreated, self::DomainRequestApproved,
+            self::AccountsReactivatedAfterPayment => 'success',
             default => 'info',
         };
+    }
+
+    /**
+     * Organisation events that may also go to WhatsApp (organisation phone
+     * and the organisation's own users). Technical and platform-internal
+     * events never do.
+     */
+    public function whatsAppEligible(): bool
+    {
+        return in_array($this, [
+            self::AccountCreated, self::AccountSuspended, self::AccountReactivated, self::AccountDeletionRequested,
+            self::DomainRequestSubmitted, self::DomainRequestApproved, self::DomainRequestRejected, self::DomainVerified,
+            self::InvoiceIssued, self::InvoiceOverdue, self::PaymentReminder, self::PaymentReceived,
+            self::AccountsSuspendedForNonPayment, self::AccountsReactivatedAfterPayment,
+        ], true);
     }
 }

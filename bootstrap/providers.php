@@ -6,6 +6,7 @@ use App\Modules\Domains\DomainsServiceProvider;
 use App\Modules\GoogleWorkspace\GoogleWorkspaceServiceProvider;
 use App\Modules\Installer\InstallerServiceProvider;
 use App\Modules\Organisations\OrganisationsServiceProvider;
+use App\Modules\WhatsApp\WhatsAppServiceProvider;
 use App\Modules\Zoho\ZohoServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\FortifyServiceProvider;
@@ -20,4 +21,5 @@ return [
     DomainsServiceProvider::class,
     BillingServiceProvider::class,
     ZohoServiceProvider::class,
+    WhatsAppServiceProvider::class,
 ];

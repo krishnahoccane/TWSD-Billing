@@ -50,6 +50,9 @@ interface WorkspaceProviderInterface
     /** Revokes the user's active web and device sessions. */
     public function signOutUser(string $userKey): void;
 
+    /** Turns off the user's 2-Step Verification enrolment (twoStepVerification.turnOff). */
+    public function turnOffTwoStepVerification(string $userKey): void;
+
     /** Permanent in Google after the recovery window. */
     public function deleteUser(string $userKey): void;
 

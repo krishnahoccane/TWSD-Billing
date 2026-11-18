@@ -137,6 +137,67 @@ class GoogleAccountOperations
         });
     }
 
+    /**
+     * Set a new password in Google. A generated password ($password null)
+     * is created here, never queued, and kept for the requesting user to
+     * reveal once (same vault as a new mailbox's first password). A typed
+     * password reaches this job only inside the encrypted job payload.
+     * Neither is ever logged, audited or stored in plain text.
+     */
+    public function resetPassword(GoogleAccount $account, #[\SensitiveParameter] ?string $password, bool $changeAtNextLogin, ?User $actor = null): void
+    {
+        if ($account->google_user_id === null) {
+            throw new WorkspaceException('This account has no Google user to change.');
+        }
+
+        $generated = $password === null;
+        $password ??= $this->vault->generate();
+
+        $this->provider->updateUser($account->google_user_id, ['password' => $password, 'change_password_at_next_login' => $changeAtNextLogin]);
+
+        DB::transaction(function () use ($account, $password, $generated, $changeAtNextLogin, $actor) {
+            if ($generated && $actor !== null) {
+                $this->vault->store($account, $actor, $password);
+            }
+
+            $account->forceFill(['last_error' => null, 'last_synced_at' => now(), 'updated_by' => $actor?->getKey()])->save();
+
+            $details = ['generated' => $generated, 'change_at_next_login' => $changeAtNextLogin];
+            $this->history->record($account, 'password_reset', details: $details, actor: $actor);
+            $this->audit->record('account.password_reset', $account, new: $details, organisation: $account->organisation, actor: $actor);
+        });
+    }
+
+    public function turnOffTwoStepVerification(GoogleAccount $account, ?User $actor = null): void
+    {
+        if ($account->google_user_id === null) {
+            throw new WorkspaceException('This account has no Google user to change.');
+        }
+
+        $this->provider->turnOffTwoStepVerification($account->google_user_id);
+
+        DB::transaction(function () use ($account, $actor) {
+            $account->forceFill(['last_error' => null, 'last_synced_at' => now(), 'updated_by' => $actor?->getKey()])->save();
+
+            $this->history->record($account, 'two_step_verification_turned_off', actor: $actor);
+            $this->audit->record('account.two_step_verification_turned_off', $account, organisation: $account->organisation, actor: $actor);
+        });
+    }
+
+    /** A password reset or 2SV change failed for good: shown on the account and notified. */
+    public function recordActionFailure(GoogleAccount $account, string $action, Throwable $error): void
+    {
+        $message = Str::limit(class_basename($error).': '.$error->getMessage(), 1000);
+
+        DB::transaction(function () use ($account, $action, $message) {
+            $account->forceFill(['last_error' => $message])->save();
+            $this->history->record($account, $action.'_failed', details: ['error' => Str::limit($message, 300)]);
+            $this->audit->record('account.'.$action.'_failed', $account, new: ['error' => Str::limit($message, 300)], organisation: $account->organisation);
+        });
+
+        app(NotificationEvents::class)->accountOperationFailed($account, $action, $message);
+    }
+
     public function suspend(GoogleAccount $account, ?User $actor = null): void
     {
         if (! $this->awaiting($account, AccountOperation::Suspend)) {
@@ -152,7 +213,10 @@ class GoogleAccountOperations
             $account->forceFill(['account_status' => AccountStatus::Suspended, 'is_suspended' => true, 'last_synced_at' => now()] + $this->cleared())->save();
 
             // Suspended mailboxes stay billable (business rule): billing_status is untouched.
-            app(NotificationEvents::class)->accountSuspended($account);
+            // A non-payment suspension sends one summary for the organisation instead.
+            if ($account->suspension_type !== 'non_payment') {
+                app(NotificationEvents::class)->accountSuspended($account);
+            }
 
             $this->history->record($account, 'suspended', $from, AccountStatus::Suspended,
                 ['reason' => $account->suspension_reason, 'sessions_revoked' => $sessionsRevoked], $actor);
@@ -169,14 +233,18 @@ class GoogleAccountOperations
         }
 
         $this->provider->reactivateUser($account->google_user_id);
+        $paymentReactivation = $account->suspension_type === 'non_payment';
 
-        DB::transaction(function () use ($account, $actor) {
+        DB::transaction(function () use ($account, $actor, $paymentReactivation) {
             $account->forceFill([
                 'account_status' => AccountStatus::Active, 'is_suspended' => false,
-                'suspension_reason' => null, 'last_synced_at' => now(),
+                'suspension_reason' => null, 'suspension_type' => null, 'last_synced_at' => now(),
             ] + $this->cleared())->save();
 
-            app(NotificationEvents::class)->accountReactivated($account);
+            // Mailboxes reactivated after payment get one summary notification instead.
+            if (! $paymentReactivation) {
+                app(NotificationEvents::class)->accountReactivated($account);
+            }
 
             $this->history->record($account, 'reactivated', AccountStatus::Suspended, AccountStatus::Active, actor: $actor);
             $this->audit->record('account.reactivated', $account, previous: ['status' => 'suspended'], new: ['status' => 'active'],

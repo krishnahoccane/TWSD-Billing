@@ -7,7 +7,9 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Notifications\Enums\NotificationType;
 use App\Modules\Notifications\Notifier;
 use Illuminate\Http\RedirectResponse;
+use App\Modules\WhatsApp\Services\PhoneNumber;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
@@ -54,24 +56,53 @@ class NotificationController extends Controller
     {
         return view('notifications.preferences', [
             'types' => $this->relevantTypes($request, $notifier),
+            'whatsapp' => array_map(fn (NotificationType $type) => $type->value, $this->whatsAppTypes($request)),
             'preferences' => $request->user()->notification_preferences ?? [],
+            'phone' => $request->user()->phone,
         ]);
     }
 
     public function savePreferences(Request $request, Notifier $notifier, AuditLogger $audit): RedirectResponse
     {
         $user = $request->user();
-        $chosen = (array) $request->input('mail', []);
+        $data = $request->validate(['phone' => ['nullable', 'string', 'max:32', 'regex:/^\+?[0-9 ()-]{10,24}$/']]);
+        $phone = filled($data['phone'] ?? null) ? PhoneNumber::normalise($data['phone']) : null;
+
+        if (filled($data['phone'] ?? null) && $phone === null) {
+            return back()->withErrors(['phone' => 'Enter a mobile number with country code, e.g. 919876543210.'])->withInput();
+        }
+
+        $chosenMail = (array) $request->input('mail', []);
+        $chosenWhatsApp = (array) $request->input('whatsapp', []);
         $preferences = [];
 
         foreach ($this->relevantTypes($request, $notifier) as $type) {
-            $preferences[$type->value] = ['mail' => in_array($type->value, $chosen, true)];
+            $preferences[$type->value]['mail'] = in_array($type->value, $chosenMail, true);
         }
 
-        $user->forceFill(['notification_preferences' => $preferences])->save();
-        $audit->record('user.notification_preferences_saved', $user, actor: $user);
+        foreach ($this->whatsAppTypes($request) as $type) {
+            $preferences[$type->value]['whatsapp'] = in_array($type->value, $chosenWhatsApp, true);
+        }
+
+        $phoneChanged = $user->phone !== $phone;
+        $user->forceFill(['notification_preferences' => $preferences, 'phone' => $phone])->save();
+        $audit->record('user.notification_preferences_saved', $user, new: $phoneChanged ? ['phone_changed' => true] : null, actor: $user);
 
         return back()->with('success', 'Notification preferences saved.');
+    }
+
+    /**
+     * WhatsApp goes to users who hold a role in an organisation.
+     *
+     * @return list<NotificationType>
+     */
+    private function whatsAppTypes(Request $request): array
+    {
+        if (! DB::table('organisation_user_roles')->where('user_id', $request->user()->getKey())->exists()) {
+            return [];
+        }
+
+        return array_values(array_filter(NotificationType::cases(), fn (NotificationType $type) => $type->whatsAppEligible()));
     }
 
     /**

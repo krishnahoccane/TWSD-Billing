@@ -122,6 +122,15 @@ class GoogleWorkspaceProvider implements WorkspaceProviderInterface
         $this->send('POST', '/users/'.rawurlencode($userKey).'/signOut');
     }
 
+    /**
+     * POST /users/{userKey}/twoStepVerification/turnOff, empty body, scope
+     * admin.directory.user.security (Directory API reference, checked 2026-11-19).
+     */
+    public function turnOffTwoStepVerification(string $userKey): void
+    {
+        $this->send('POST', '/users/'.rawurlencode($userKey).'/twoStepVerification/turnOff');
+    }
+
     public function deleteUser(string $userKey): void
     {
         $this->send('DELETE', '/users/'.rawurlencode($userKey));

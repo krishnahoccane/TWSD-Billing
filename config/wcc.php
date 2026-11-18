@@ -54,11 +54,27 @@ return [
         'webhook_secret' => env('ZOHO_WEBHOOK_SECRET'),
     ],
 
+    'whatsapp' => [
+        // Real messages only when true (or in production) and never in tests.
+        // The app key and auth key are entered by a Super Admin under
+        // Integrations -> WhatsApp and stored encrypted, never in .env.
+        'enabled' => (bool) env('WHATSAPP_ENABLED', false),
+        'endpoint' => env('WHATSAPP_ENDPOINT', 'https://api.whatsapp.webglit.com/api/create-message'),
+        // Added to 10-digit numbers that have no country code.
+        'default_country_code' => env('WHATSAPP_DEFAULT_COUNTRY_CODE', '91'),
+    ],
+
     'billing' => [
         'currency' => env('BILLING_CURRENCY', 'INR'),
         'timezone' => env('BILLING_TIMEZONE', 'Asia/Kolkata'),
         'default_cycle' => env('BILLING_DEFAULT_CYCLE', 'monthly'),
         'default_due_days' => (int) env('BILLING_DEFAULT_DUE_DAYS', 15),
+        // Payment reminders go out 2 and 1 days before the due date, on it, and
+        // 1 and 2 days after. When the invoice is still unpaid after the last
+        // grace day (due date + suspend_after_days), every active mailbox of the
+        // organisation is suspended; paying reactivates exactly those mailboxes.
+        'auto_suspend' => (bool) env('BILLING_AUTO_SUSPEND', true),
+        'suspend_after_days' => max(0, (int) env('BILLING_SUSPEND_AFTER_DAYS', 2)),
         // Percentage, kept as a string so it is never handled as a float.
         'default_tax_rate' => (string) env('BILLING_DEFAULT_TAX_RATE', '18.00'),
         // Your own GST state code (first two digits of your GSTIN, e.g. 36 =

@@ -89,6 +89,10 @@
                              hint="A link to set their own password is e-mailed to this address.">
                 <x-ui.form.input name="email" id="user_email" type="email" bag="user" required maxlength="255" />
             </x-ui.form.field>
+            <x-ui.form.field label="WhatsApp number (optional)" for="user_phone" name="phone" bag="user"
+                             hint="With country code, e.g. 919876543210. The user can change it under Account → Notifications.">
+                <x-ui.form.input name="phone" id="user_phone" bag="user" inputmode="tel" maxlength="32" />
+            </x-ui.form.field>
             <x-ui.form.field label="Platform role" for="platform_role" bag="user"
                              hint="Leave empty for organisation managers and billing managers; grant their access from the organisation's page. Platform roles require two-factor authentication.">
                 <x-ui.form.select name="platform_role" bag="user" placeholder="None" :options="$platformRoles" />

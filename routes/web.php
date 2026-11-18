@@ -19,6 +19,7 @@ use App\Modules\Organisations\Http\Controllers\OrganisationController;
 use App\Modules\Organisations\Http\Controllers\OrganisationMemberController;
 use App\Modules\Support\Http\Controllers\SupportController;
 use App\Modules\System\Http\Controllers\SystemController;
+use App\Modules\WhatsApp\Http\Controllers\WhatsAppIntegrationController;
 use App\Modules\Zoho\Http\Controllers\ZohoIntegrationController;
 use Illuminate\Support\Facades\Route;
 
@@ -75,6 +76,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::put('/accounts/{account}', [AccountController::class, 'update'])->name('accounts.update');
         Route::post('/accounts/{account}/suspend', [AccountController::class, 'suspend'])->name('accounts.suspend');
         Route::post('/accounts/{account}/reactivate', [AccountController::class, 'reactivate'])->name('accounts.reactivate');
+        Route::post('/accounts/{account}/password', [AccountController::class, 'resetPassword'])->middleware('throttle:10,1')->name('accounts.password');
+        Route::post('/accounts/{account}/two-step-verification/off', [AccountController::class, 'turnOffTwoStepVerification'])->middleware('throttle:10,1')->name('accounts.two-step-off');
         Route::post('/accounts/{account}/soft-delete', [AccountController::class, 'softDelete'])->name('accounts.soft-delete');
         Route::post('/accounts/{account}/restore', [AccountController::class, 'restore'])->name('accounts.restore');
         Route::post('/accounts/{account}/retry', [AccountController::class, 'retry'])->name('accounts.retry');
@@ -134,6 +137,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/integrations/google', [IntegrationController::class, 'google'])->name('integrations.google');
         Route::post('/integrations/google/test', [IntegrationController::class, 'testGoogle'])->middleware('throttle:10,1')->name('integrations.google.test');
         Route::get('/integrations/logs', [IntegrationController::class, 'logs'])->name('integrations.logs');
+        Route::get('/integrations/whatsapp', [WhatsAppIntegrationController::class, 'show'])->name('integrations.whatsapp');
+        Route::post('/integrations/whatsapp/settings', [WhatsAppIntegrationController::class, 'saveSettings'])->name('integrations.whatsapp.settings');
+        Route::post('/integrations/whatsapp/keys', [WhatsAppIntegrationController::class, 'saveKeys'])->middleware('throttle:10,1')->name('integrations.whatsapp.keys');
+        Route::delete('/integrations/whatsapp/keys', [WhatsAppIntegrationController::class, 'clearKeys'])->name('integrations.whatsapp.keys.clear');
+        Route::post('/integrations/whatsapp/test', [WhatsAppIntegrationController::class, 'test'])->middleware('throttle:5,1')->name('integrations.whatsapp.test');
         Route::get('/integrations/zoho', [ZohoIntegrationController::class, 'show'])->name('integrations.zoho');
         Route::post('/integrations/zoho/settings', [ZohoIntegrationController::class, 'saveSettings'])->name('integrations.zoho.settings');
         Route::get('/integrations/zoho/connect', [ZohoIntegrationController::class, 'connect'])->name('integrations.zoho.connect');

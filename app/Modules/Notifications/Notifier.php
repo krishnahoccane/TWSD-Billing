@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Modules\AccessControl\Services\AccessResolver;
 use App\Modules\Notifications\Enums\NotificationType;
 use App\Modules\Organisations\Models\Organisation;
+use App\Modules\WhatsApp\Services\WhatsAppNotifier;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -42,6 +43,9 @@ class Notifier
             if ($throttleKey !== null && ! Cache::add('notify:'.$type->value.':'.$throttleKey, 1, $throttleSeconds)) {
                 return 0;
             }
+
+            // WhatsApp (organisation phone + the organisation's own users), when switched on for this event.
+            app(WhatsAppNotifier::class)->notify($type, $title, $body, $url, $organisation);
 
             $recipients = $this->recipients($type, $organisation)->merge($extra)
                 ->filter(fn ($user) => $user instanceof User && $user->is_active)

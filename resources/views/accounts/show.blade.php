@@ -17,7 +17,10 @@
         // Move an already-assigned mailbox to another organisation.
         'reassign' => $idle && ! $account->isUnassigned() && $assignable !== [],
         'billingStart' => $idle && $billingStart !== null && $user->can('changeBillingStart', $account),
+        'password' => $idle && $account->google_user_id !== null && in_array($status, [AccountStatus::Active, AccountStatus::Suspended], true) && $user->can('resetPassword', $account),
+        'twoStep' => $idle && $account->google_user_id !== null && in_array($status, [AccountStatus::Active, AccountStatus::Suspended], true) && $user->can('manageSecurity', $account),
     ];
+    $paymentSuspended = $status === AccountStatus::Suspended && $account->suspension_type === 'non_payment';
 
     $billedFrom = $billingStart !== null ? \Carbon\CarbonImmutable::parse(substr((string) $billingStart, 0, 10)) : null;
 
@@ -44,6 +47,12 @@
         @if ($can['reassign'])
             <x-ui.button variant="secondary" icon="building-2" @click="$dispatch('open-modal', 'reassign')">Change organisation</x-ui.button>
         @endif
+        @if ($can['password'])
+            <x-ui.button variant="secondary" icon="key-round" @click="$dispatch('open-modal', 'reset-password')">Reset password</x-ui.button>
+        @endif
+        @if ($can['twoStep'])
+            <x-ui.button variant="secondary" icon="shield-off" @click="$dispatch('open-modal', 'two-step-off')">Turn off 2SV</x-ui.button>
+        @endif
         @if ($can['suspend'])
             <x-ui.button variant="secondary" icon="pause-circle" @click="$dispatch('open-modal', 'suspend')">Suspend</x-ui.button>
         @endif
@@ -63,15 +72,22 @@
             <x-ui.alert tone="danger">{{ $errors->first('account') ?: $errors->first('request') ?: $errors->first('confirm_email') ?: $errors->first('reason') ?: $errors->first('organisation') }}</x-ui.alert>
         @endif
 
+        @if ($paymentSuspended)
+            <x-ui.alert tone="danger" title="Suspended for non-payment">
+                This mailbox was suspended automatically because an invoice was not paid. It is reactivated automatically when the
+                payment is received{{ $can['reactivate'] ? '' : ', or by a Super Admin' }}.
+            </x-ui.alert>
+        @endif
+
         @if ($initialPassword !== null)
-            <x-ui.alert tone="warning" title="Initial password — shown this one time only">
-                <p class="mt-1">Give it to the mailbox owner over a secure channel. They must change it at first sign-in.</p>
+            <x-ui.alert tone="warning" title="Password — shown this one time only">
+                <p class="mt-1">Give it to the mailbox owner over a secure channel.</p>
                 <p class="mt-2 rounded bg-white px-3 py-2 font-mono text-base tracking-wide text-zinc-900 select-all dark:bg-zinc-900 dark:text-zinc-100">{{ $initialPassword }}</p>
                 <p class="mt-2 text-xs">It has now been removed from this system and cannot be shown again.</p>
             </x-ui.alert>
         @elseif ($canReveal)
-            <x-ui.alert tone="info" title="Initial password ready">
-                <p>You can reveal the generated password once. It expires 24 hours after the mailbox was created.</p>
+            <x-ui.alert tone="info" title="Generated password ready">
+                <p>You can reveal the generated password once. It expires 24 hours after it was generated.</p>
                 <x-ui.button size="sm" class="mt-2" icon="key-round" @click="$dispatch('open-modal', 'reveal')">Reveal password</x-ui.button>
             </x-ui.alert>
         @endif
@@ -198,7 +214,7 @@
 
     {{-- Confirmation dialogs --}}
     @if ($canReveal)
-        <x-ui.confirm-modal name="reveal" title="Reveal the initial password?" :action="route('accounts.reveal', $account)" confirm-label="Reveal once">
+        <x-ui.confirm-modal name="reveal" title="Reveal the generated password?" :action="route('accounts.reveal', $account)" confirm-label="Reveal once">
             The password is shown one time and then removed from this system. Make sure nobody else can see your screen.
         </x-ui.confirm-modal>
     @endif
@@ -244,6 +260,38 @@
                 </div>
             </form>
         </x-ui.modal>
+    @endif
+    @if ($can['password'])
+        <x-ui.modal name="reset-password" title="Reset the password?">
+            <form method="POST" action="{{ route('accounts.password', $account) }}" x-data="{ mode: @js(old('mode', 'generate')) }" class="space-y-4" autocomplete="off">
+                @csrf
+                <p class="text-sm text-zinc-600 dark:text-zinc-300">Sets a new password for {{ $account->primary_email }} in Google Workspace. The old password stops working.</p>
+                <div class="space-y-2 text-sm">
+                    <label class="flex items-center gap-2"><input type="radio" name="mode" value="generate" x-model="mode" class="accent-accent-600"> Generate a strong password automatically (revealed to you once)</label>
+                    <label class="flex items-center gap-2"><input type="radio" name="mode" value="manual" x-model="mode" class="accent-accent-600"> Create the password</label>
+                </div>
+                <div x-show="mode === 'manual'" x-cloak class="space-y-4">
+                    <x-ui.form.field label="New password" for="new_password" name="password" bag="password" hint="8–100 characters: letters, digits and symbols.">
+                        <x-ui.form.input type="password" name="password" id="new_password" bag="password" minlength="8" maxlength="100" autocomplete="new-password" />
+                    </x-ui.form.field>
+                    <x-ui.form.field label="Confirm password" for="new_password_confirmation" name="password_confirmation" bag="password">
+                        <x-ui.form.input type="password" name="password_confirmation" id="new_password_confirmation" bag="password" minlength="8" maxlength="100" autocomplete="new-password" />
+                    </x-ui.form.field>
+                </div>
+                <input type="hidden" name="change_at_next_login" value="0">
+                <x-ui.form.checkbox name="change_at_next_login" label="Ask user to change their password when they sign in" :checked="true" />
+                <div class="flex justify-end gap-2">
+                    <x-ui.button variant="secondary" @click="$dispatch('close-modal', 'reset-password')">Cancel</x-ui.button>
+                    <x-ui.button type="submit">Reset password</x-ui.button>
+                </div>
+            </form>
+        </x-ui.modal>
+    @endif
+    @if ($can['twoStep'])
+        <x-ui.confirm-modal name="two-step-off" title="Turn off 2-Step Verification?" :action="route('accounts.two-step-off', $account)" confirm-label="Turn off 2SV" danger require-reason>
+            {{ $account->primary_email }} will be able to sign in with the password alone until 2-Step Verification is set up again.
+            If your Google Workspace enforces 2SV, the user is asked to enrol again at the next sign-in.
+        </x-ui.confirm-modal>
     @endif
     @if ($can['suspend'])
         <x-ui.confirm-modal name="suspend" title="Suspend this mailbox?" :action="route('accounts.suspend', $account)" confirm-label="Suspend" danger require-reason>
@@ -298,7 +346,10 @@
                     <x-ui.form.checkbox name="vault_checked" label="Google Vault holds and retention rules have been checked" />
                     <x-ui.form.checkbox name="dependencies_checked" label="Owned files, groups, aliases and shared resources have been transferred or are not needed" />
                 </div>
-                @if ($errors->getBag('permanent')->any())
+                @if ($can['password'] && $errors->getBag('password')->any())
+        <div x-data x-init="$nextTick(() => $dispatch('open-modal', 'reset-password'))"></div>
+    @endif
+    @if ($errors->getBag('permanent')->any())
                     <p class="text-xs text-red-600 dark:text-red-400" role="alert">{{ $errors->getBag('permanent')->first() }}</p>
                 @endif
                 <x-ui.form.field label="Reason" for="permanent_reason" name="reason" bag="permanent" required>

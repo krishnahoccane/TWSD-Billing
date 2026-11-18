@@ -69,6 +69,14 @@ class MockWorkspaceProvider implements WorkspaceProviderInterface
         return count(array_filter($this->calls, fn (array $call) => $call['operation'] === $operation));
     }
 
+    /** @return array<string, mixed>|null the stored user (never contains a password) */
+    public function rawUser(string $userKey): ?array
+    {
+        $id = $this->resolve($userKey);
+
+        return $id === null ? null : $this->users[$id];
+    }
+
     public function seedDomain(string $name, bool $isPrimary = false, bool $verified = true, ?string $aliasOf = null): void
     {
         $this->domains[strtolower($name)] = ['isPrimary' => $isPrimary, 'verified' => $verified, 'aliasOf' => $aliasOf === null ? null : strtolower($aliasOf)];
@@ -189,6 +197,12 @@ class MockWorkspaceProvider implements WorkspaceProviderInterface
             }
         }
 
+        // The password itself is never kept; only that it was changed.
+        if (array_key_exists('password', $attributes)) {
+            $this->users[$id]['passwordChangedAt'] = now()->toIso8601String();
+            $this->users[$id]['changePasswordAtNextLogin'] = (bool) ($attributes['change_password_at_next_login'] ?? false);
+        }
+
         $this->save();
 
         return WorkspaceUser::fromArray($this->users[$id]);
@@ -212,6 +226,15 @@ class MockWorkspaceProvider implements WorkspaceProviderInterface
     {
         $this->called('users.signOut', $userKey);
         $this->resolveOrFail($userKey);
+    }
+
+    public function turnOffTwoStepVerification(string $userKey): void
+    {
+        $this->called('users.twoStepVerification.turnOff', $userKey);
+
+        $id = $this->resolveOrFail($userKey);
+        $this->users[$id]['isEnrolledIn2Sv'] = false;
+        $this->save();
     }
 
     public function deleteUser(string $userKey): void

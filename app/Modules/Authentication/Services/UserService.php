@@ -27,14 +27,18 @@ class UserService
         private readonly RoleAssignmentService $roles,
     ) {}
 
-    public function create(string $name, string $email, User $actor, ?RoleName $platformRole = null): User
+    public function create(string $name, string $email, User $actor, ?RoleName $platformRole = null, ?string $phone = null): User
     {
-        $user = DB::transaction(function () use ($name, $email, $actor, $platformRole) {
+        $user = DB::transaction(function () use ($name, $email, $actor, $platformRole, $phone) {
             $user = User::query()->create([
                 'name' => trim($name),
                 'email' => Str::lower(trim($email)),
                 'password' => Str::password(40),
             ]);
+
+            if ($phone !== null) {
+                $user->forceFill(['phone' => $phone])->save();
+            }
 
             $this->audit->record(
                 action: 'user.created',
