@@ -45,6 +45,7 @@ class User extends Authenticatable
         'two_factor_recovery_codes' => null,
         'two_factor_confirmed_at' => null,
         'notification_preferences' => null,
+        'phone' => null,
     ];
 
     protected function casts(): array

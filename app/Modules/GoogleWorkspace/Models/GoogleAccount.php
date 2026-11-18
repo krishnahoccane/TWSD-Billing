@@ -33,6 +33,7 @@ class GoogleAccount extends Model
     protected $attributes = [
         'organisational_unit_path' => '/',
         'is_suspended' => false,
+        'suspension_type' => null,
         'billing_status' => 'pending',
     ];
 

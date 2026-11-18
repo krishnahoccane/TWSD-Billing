@@ -56,6 +56,9 @@ Holders of any platform role are "privileged" and must use TOTP two-factor authe
 | `accounts.permanent_delete.execute` **S** | ● | ○ | ○ | ○ |
 | `accounts.reassign_organisation` **S** | ● | ○ | ○ | ○ |
 | `accounts.sync` | ● | ● | ○ | ○ |
+| `accounts.reset_password` | ● | ● | ● | ○ |
+| `accounts.manage_security` (turn off 2SV) | ● | ● | ● | ○ |
+| `accounts.reactivate_payment_suspended` **S** | ● | ○ | ○ | ○ |
 | `domains.view` | ● | ● | ● | ○ |
 | `domains.request` | ● | ○ | ● | ○ |
 | `domains.approve` **S** | ● | ○ | ○ | ○ |
@@ -76,6 +79,7 @@ Holders of any platform role are "privileged" and must use TOTP two-factor authe
 | `payments.reconcile` **S** | ● | ○ | ○ | ○ |
 | `integrations.google.manage` **S** | ● | ○ | ○ | ○ |
 | `integrations.zoho.manage` **S** | ● | ○ | ○ | ○ |
+| `integrations.whatsapp.manage` **S** | ● | ○ | ○ | ○ |
 | `integrations.logs.view` | ● | ● | ○ | ○ |
 | `audit.view` | ● | ○ | ○ | ○ |
 | `audit.view_technical` | ● | ● | ○ | ○ |

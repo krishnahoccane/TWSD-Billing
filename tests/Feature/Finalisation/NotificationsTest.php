@@ -3,10 +3,10 @@
 namespace Tests\Feature\Finalisation;
 
 use App\Models\User;
-use App\Modules\Billing\Jobs\SendOverdueInvoiceRemindersJob;
 use App\Modules\Billing\Models\AccountBillingPeriod;
 use App\Modules\Billing\Models\Invoice;
 use App\Modules\Billing\Services\InvoiceService;
+use App\Modules\Billing\Services\PaymentReminderService;
 use App\Modules\Billing\Services\PaymentService;
 use App\Modules\Billing\Services\PricingService;
 use App\Modules\Domains\Models\DomainRequest;
@@ -113,14 +113,13 @@ class NotificationsTest extends WorkspaceTestCase
         app(PaymentService::class)->recordVerified($organisation, 29500, now()->toDateString(), 'offline', details: ['reference' => 'UTR5'], invoice: $invoice, actor: $admin);
         $this->assertContains('Payment received', $this->titles($billing));
 
-        // Overdue reminders: once per invoice.
+        // Payment reminders: once per invoice and stage; never for a paid invoice.
         $second = $service->issue($service->generate($organisation, $start->addMonth(), $start->addMonth()->endOfMonth()->startOfDay(), $admin), $admin);
-        $this->travel(40)->days();
-        (new SendOverdueInvoiceRemindersJob)->handle(app(NotificationEvents::class));
-        (new SendOverdueInvoiceRemindersJob)->handle(app(NotificationEvents::class));
-        $this->assertSame(1, collect($this->titles($billing))->filter(fn ($t) => $t === 'Invoice '.$second->invoice_number.' is overdue')->count());
-        $this->assertNotNull($second->fresh()->overdue_notified_at);
-        $this->assertNotContains('Invoice '.$invoice->invoice_number.' is overdue', $this->titles($billing), 'A paid invoice is never overdue.');
+        $dueDay = CarbonImmutable::parse($second->due_date->toDateString(), config('wcc.billing.timezone'));
+        app(PaymentReminderService::class)->run($dueDay);
+        app(PaymentReminderService::class)->run($dueDay);
+        $this->assertSame(1, collect($this->titles($billing))->filter(fn ($t) => $t === 'Final reminder: invoice '.$second->invoice_number.' is due today')->count());
+        $this->assertNotContains('Final reminder: invoice '.$invoice->invoice_number.' is due today', $this->titles($billing), 'A paid invoice gets no reminders.');
         $this->assertSame(Invoice::PAID, $invoice->fresh()->status);
     }
 

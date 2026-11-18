@@ -5,11 +5,13 @@ namespace App\Modules\Billing\Services;
 use App\Models\User;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Billing\Exceptions\BillingException;
+use App\Modules\Billing\Jobs\EnforcePaymentSuspensionsJob;
 use App\Modules\Billing\Models\BillingAdjustment;
 use App\Modules\Billing\Models\BillingCycle;
 use App\Modules\Billing\Models\CreditNote;
 use App\Modules\Billing\Models\Invoice;
 use App\Modules\Billing\Models\InvoiceItem;
+use App\Modules\Billing\Models\PaymentSuspension;
 use App\Modules\Billing\Support\Money;
 use App\Modules\Notifications\NotificationEvents;
 use App\Modules\Organisations\Models\Organisation;
@@ -293,6 +295,12 @@ class InvoiceService
                 default => Invoice::ISSUED,
             },
         ])->save();
+
+        // Paid: reactivate mailboxes suspended for non-payment (after commit).
+        if ($balance <= (int) config('wcc.billing.rounding_tolerance_minor', 100)
+            && PaymentSuspension::query()->where('organisation_id', $invoice->organisation_id)->where('status', PaymentSuspension::ACTIVE)->exists()) {
+            EnforcePaymentSuspensionsJob::dispatch((int) $invoice->organisation_id)->afterCommit();
+        }
     }
 
     private function cycle(Organisation $organisation, CarbonImmutable $start, CarbonImmutable $end): BillingCycle

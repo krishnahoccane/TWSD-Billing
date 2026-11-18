@@ -9,7 +9,10 @@ use App\Modules\Domains\Models\DomainRequest;
 use App\Modules\GoogleWorkspace\Models\AccountDeletionRequest;
 use App\Modules\GoogleWorkspace\Models\GoogleAccount;
 use App\Modules\Notifications\Enums\NotificationType as T;
+use App\Modules\Organisations\Models\Organisation;
 use App\Modules\Support\Models\SupportRequest;
+use App\Modules\Zoho\Services\ZohoSync;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 
 /**
@@ -125,11 +128,57 @@ class NotificationEvents
             route('invoices.show', $invoice), $invoice->organisation);
     }
 
-    public function invoiceOverdue(Invoice $invoice): void
+    /**
+     * Payment reminder schedule (PaymentReminderService). Every reminder says
+     * that the organisation's mailboxes are suspended automatically if the
+     * invoice stays unpaid.
+     */
+    public function paymentReminder(Invoice $invoice, string $stage): void
     {
-        $this->notifier->send(T::InvoiceOverdue, 'Invoice '.$invoice->invoice_number.' is overdue',
-            Money::format($invoice->balance_minor, $invoice->currency).' was due on '.$invoice->due_date?->format('d M Y').'.',
+        $tz = config('wcc.billing.timezone');
+        $due = CarbonImmutable::parse($invoice->due_date->toDateString(), $tz);
+        $suspendOn = $due->addDays((int) config('wcc.billing.suspend_after_days', 2) + 1);
+        $amount = Money::format($invoice->balance_minor, $invoice->currency);
+        $number = $invoice->invoice_number;
+        $autoSuspend = (bool) config('wcc.billing.auto_suspend', true);
+        $warning = $autoSuspend
+            ? ' If it is not paid by '.$suspendOn->subDay()->format('d M Y').', all email accounts of '.$invoice->organisation?->name
+                .' will be suspended automatically on '.$suspendOn->format('d M Y').'.'
+            : '';
+
+        [$title, $lead] = match ($stage) {
+            'reminder_1' => ["Payment reminder: invoice {$number}", "Invoice {$number} for {$amount} is due on {$due->format('d M Y')}."],
+            'reminder_2' => ["Second reminder: invoice {$number} is due tomorrow", "Invoice {$number} for {$amount} is due tomorrow, {$due->format('d M Y')}."],
+            'final_1' => ["Final reminder: invoice {$number} is due today", "Invoice {$number} for {$amount} is due today."],
+            'final_2' => ["Final reminder: invoice {$number} is overdue", "Invoice {$number} for {$amount} was due on {$due->format('d M Y')} and is still unpaid."],
+            default => ['Final reminder: email accounts due for suspension', "Invoice {$number} for {$amount} was due on {$due->format('d M Y')} and is still unpaid."
+                .($autoSuspend ? ' Your email accounts are due for automatic suspension.' : '')],
+        };
+
+        $payLink = app(ZohoSync::class)->mode() === 'live' ? app(ZohoSync::class)->mapping($invoice)?->zoho_url : null;
+
+        $this->notifier->send($stage === 'reminder_1' || $stage === 'reminder_2' ? T::PaymentReminder : T::InvoiceOverdue, $title,
+            $lead.$warning.($payLink ? ' Pay online: '.$payLink : ' Please pay now.').' Ignore this message if you have already paid.',
             route('invoices.show', $invoice), $invoice->organisation);
+    }
+
+    /** @param  iterable<Invoice>  $invoices */
+    public function accountsSuspendedForNonPayment(Organisation $organisation, iterable $invoices, int $count): void
+    {
+        $numbers = collect($invoices)->pluck('invoice_number')->filter()->implode(', ');
+
+        $this->notifier->send(T::AccountsSuspendedForNonPayment, 'Email accounts suspended for non-payment',
+            "{$count} email account(s) of {$organisation->name} were suspended automatically because invoice {$numbers} is unpaid. "
+                .'They are reactivated automatically as soon as the payment is received. Accounts that were already suspended before stay suspended.',
+            route('invoices.index'), $organisation);
+    }
+
+    public function accountsReactivatedAfterPayment(Organisation $organisation, int $count): void
+    {
+        $this->notifier->send(T::AccountsReactivatedAfterPayment, 'Email accounts reactivated',
+            "Payment received — thank you. {$count} email account(s) of {$organisation->name} suspended for non-payment are being reactivated. "
+                .'Accounts that were suspended by hand before stay suspended.',
+            route('accounts.index'), $organisation);
     }
 
     public function paymentReceived(Payment $payment): void

@@ -513,6 +513,37 @@ made Alpine transitions look broken during the check; they work when the pane is
   The existing ₹0.01 invoice is closed by the next hourly Zoho sync after deployment.
 - Tests: `Zoho/ZohoGstRoundingTest` (4), GST tests in `Billing/BillingEngineTest`. Decision D-28.
 
+## WhatsApp, mailbox security, reminders and non-payment suspension (2026-11-19)
+
+- **Schedule:** Zoho reconciliation and Google domain import now every 30 minutes (Google mailboxes stay every 15,
+  reconciliation every 30). Automatic billing on the 1st at 03:00 was already in place. All of it needs
+  `schedule:run` in cron.
+- **WhatsApp** (`app/Modules/WhatsApp`): Integrations → WhatsApp (`integrations.whatsapp.manage`, Super Admin) saves
+  the app key and auth key encrypted in `integration_settings.secrets` (never shown, logged or audited — only which
+  key changed), switches sending on, picks events, sends a test. `WhatsAppClient` posts the multipart form
+  (`appkey`, `authkey`, `to`, `message`); mock in tests/local, logging decorator (masked number) to
+  `integration_sync_logs`. `Notifier::send` hands every WhatsApp-eligible organisation event to `WhatsAppNotifier`:
+  the organisation's contact phone and the users holding a role in that organisation (D-30), queued
+  `SendWhatsAppMessageJob` with retries. Users set their number and per-event WhatsApp switch under Account →
+  Notifications; Super Admins can enter it when creating a user (`users.phone`).
+- **Mailbox password reset** (`accounts.reset_password`: Super Admin, Operations Admin, organisation manager):
+  generated (created in the job, revealed once through the existing password vault) or typed (travels only in the
+  encrypted job payload, `ShouldBeEncrypted`), with "Ask user to change their password when they sign in".
+- **Turn off 2-Step Verification** (`accounts.manage_security`, same roles): `POST
+  /users/{key}/twoStepVerification/turnOff` (scope already granted), reason required, audited.
+- **Payment reminders** (`PaymentReminderService`, daily 09:00): due −2, −1, 0, +1, +2, each once
+  (`invoice_reminders`), stating the automatic suspension date; nothing is sent once paid. Replaces the single
+  overdue reminder.
+- **Non-payment suspension** (`PaymentSuspensionService`, hourly and on payment): from due + 3, every active mailbox
+  is suspended with `suspension_type = non_payment`; `payment_suspensions` / `payment_suspension_accounts` record
+  each mailbox's state before (active → suspended, or already suspended by hand → left alone). When nothing is
+  overdue any more, only the mailboxes it suspended are reactivated. Managers and Operations Admins cannot reactivate
+  them (`accounts.reactivate_payment_suspended`, Super Admin). One summary notification per organisation instead of
+  one per mailbox. Decision D-29.
+- Migration `2026_11_26_000001` adds the tables/columns and grants the new permissions to existing roles.
+- Tests: `WhatsApp/WhatsAppIntegrationTest` (6), `GoogleWorkspace/PasswordAndTwoStepTest` (5),
+  `Billing/PaymentSuspensionTest` (6).
+
 ## Project status
 
 All seven phases are built. Remaining work before production is configuration and the first live tests: mail

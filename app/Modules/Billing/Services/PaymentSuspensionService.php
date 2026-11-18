@@ -2,7 +2,6 @@
 
 namespace App\Modules\Billing\Services;
 
-use App\Models\User;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Billing\Models\Invoice;
 use App\Modules\Billing\Models\PaymentSuspension;
@@ -14,11 +13,11 @@ use App\Modules\Notifications\NotificationEvents;
 use App\Modules\Organisations\Enums\OrganisationStatus;
 use App\Modules\Organisations\Models\Organisation;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 
 /**
  * Automatic suspension for non-payment, and automatic reactivation once
@@ -52,7 +51,7 @@ class PaymentSuspensionService
 
         // Lift first, so an organisation that has just paid is not re-suspended.
         PaymentSuspension::query()->where('status', PaymentSuspension::ACTIVE)->orderBy('id')->pluck('organisation_id')->unique()
-            ->each(function (int $organisationId) use (&$summary, $today) {
+            ->each(function ($organisationId) use (&$summary, $today) {
                 $summary['reactivated'] += $this->liftIfPaid(Organisation::query()->findOrFail($organisationId), $today);
             });
 
@@ -60,7 +59,7 @@ class PaymentSuspensionService
             return $summary;
         }
 
-        $this->overdueInvoices($today)->groupBy('organisation_id')->each(function (Collection $invoices, int $organisationId) use (&$summary) {
+        $this->overdueInvoices($today)->groupBy('organisation_id')->each(function (Collection $invoices, $organisationId) use (&$summary) {
             $organisation = Organisation::query()->find($organisationId);
 
             if ($organisation !== null && $organisation->status !== OrganisationStatus::Inactive) {
@@ -110,7 +109,7 @@ class PaymentSuspensionService
 
             $mailboxes = GoogleAccount::query()->where('organisation_id', $organisation->getKey())
                 ->whereIn('account_status', [AccountStatus::Active->value, AccountStatus::Suspended->value])
-                ->whereNotIn('id', $recorded)->orderBy('id')->get();
+                ->whereNotIn('id', $recorded)->with('organisation')->orderBy('id')->get();
 
             foreach ($mailboxes as $account) {
                 // Record the state BEFORE changing anything.
@@ -131,6 +130,20 @@ class PaymentSuspensionService
                 } catch (ValidationException) {
                     PaymentSuspensionAccount::query()->where('payment_suspension_id', $suspension->getKey())
                         ->where('google_account_id', $account->getKey())->delete();
+                }
+            }
+
+            // A suspension that failed in Google left the mailbox active: try again.
+            foreach ($suspension->accounts()->where('action', PaymentSuspensionAccount::SUSPENDED)->whereNull('reactivated_at')->with('account.organisation')->get() as $row) {
+                $account = $row->account;
+
+                if ($account !== null && $account->account_status === AccountStatus::Active && $account->pending_operation === null && ! in_array($account->getKey(), $mailboxes->modelKeys(), true)) {
+                    try {
+                        $this->accounts->requestPaymentSuspension($account, $reason);
+                        $count++;
+                    } catch (ValidationException) {
+                        // picked up on the next run
+                    }
                 }
             }
 
@@ -172,7 +185,7 @@ class PaymentSuspensionService
             $count = 0;
             $waiting = 0;
 
-            foreach ($suspension->accounts()->where('action', PaymentSuspensionAccount::SUSPENDED)->whereNull('reactivated_at')->with('account')->get() as $row) {
+            foreach ($suspension->accounts()->where('action', PaymentSuspensionAccount::SUSPENDED)->whereNull('reactivated_at')->with('account.organisation')->get() as $row) {
                 $account = $row->account;
 
                 // Still being suspended in Google: try again on the next run.
@@ -255,10 +268,8 @@ class PaymentSuspensionService
     {
         try {
             return Cache::lock('payment-suspension:'.$organisation->getKey(), 120)->block(30, $callback);
-        } catch (Throwable $e) {
-            report($e);
-
-            return null;
+        } catch (LockTimeoutException) {
+            return null; // another run is handling this organisation
         }
     }
 }

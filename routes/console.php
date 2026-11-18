@@ -1,7 +1,8 @@
 <?php
 
+use App\Modules\Billing\Jobs\EnforcePaymentSuspensionsJob;
 use App\Modules\Billing\Jobs\GenerateBillingCycleJob;
-use App\Modules\Billing\Jobs\SendOverdueInvoiceRemindersJob;
+use App\Modules\Billing\Jobs\SendPaymentRemindersJob;
 use App\Modules\GoogleWorkspace\Jobs\ImportGoogleDomainsJob;
 use App\Modules\GoogleWorkspace\Jobs\ImportGoogleUsersJob;
 use App\Modules\GoogleWorkspace\Jobs\ReconcileGoogleAccountsJob;
@@ -36,8 +37,14 @@ Schedule::job(new GenerateBillingCycleJob(autoIssue: true))->monthlyOn(1, '03:00
 // payments, record Zoho payments, report differences. Every 30 minutes.
 Schedule::job(new ReconcileZohoPaymentJob)->everyThirtyMinutes()->withoutOverlapping();
 
-// One reminder per overdue invoice, the morning after its due date.
-Schedule::job(new SendOverdueInvoiceRemindersJob)->dailyAt('09:00')->timezone(config('wcc.billing.timezone'))->withoutOverlapping();
+// Payment reminders: 2 and 1 days before the due date, on it, and 1 and 2
+// days after. A paid invoice gets no further reminders.
+Schedule::job(new SendPaymentRemindersJob)->dailyAt('09:00')->timezone(config('wcc.billing.timezone'))->withoutOverlapping();
+
+// Non-payment: suspend the organisation's active mailboxes once the grace
+// days after the due date have passed; reactivate them once paid. Hourly
+// (payments also trigger it straight away).
+Schedule::job(new EnforcePaymentSuspensionsJob)->hourlyAt(5)->withoutOverlapping();
 
 // Heartbeat shown on System → Health, so a missing cron entry is noticed.
 Schedule::call(fn () => Cache::put(SystemController::HEARTBEAT_KEY, now()->toIso8601String(), 3600))->everyMinute()->name('scheduler-heartbeat');
