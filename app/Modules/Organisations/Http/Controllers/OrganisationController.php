@@ -3,6 +3,9 @@
 namespace App\Modules\Organisations\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\AccessControl\Enums\Ability;
+use App\Modules\GoogleWorkspace\Enums\BillingStatus;
+use App\Modules\GoogleWorkspace\Models\GoogleAccount;
 use App\Modules\Organisations\Enums\OrganisationStatus;
 use App\Modules\Organisations\Http\Requests\ChangeOrganisationStatusRequest;
 use App\Modules\Organisations\Http\Requests\OrganisationRequest;
@@ -47,8 +50,21 @@ class OrganisationController extends Controller
 
         $organisation->load(['domains' => fn ($query) => $query->orderBy('domain_name'), 'contacts' => fn ($query) => $query->orderBy('name')]);
 
+        $user = request()->user();
+        $canViewAccounts = $user->hasAbility(Ability::AccountsView, $organisation);
+
         return view('organisations.show', [
             'organisation' => $organisation,
+            // Billable mailboxes (what this organisation is charged for), shown to those who may see its accounts.
+            'billableAccounts' => $canViewAccounts
+                ? GoogleAccount::query()->where('organisation_id', $organisation->getKey())
+                    ->where('billing_status', BillingStatus::Billable)->count()
+                : null,
+            'billableByDomain' => $canViewAccounts
+                ? GoogleAccount::query()->where('organisation_id', $organisation->getKey())
+                    ->where('billing_status', BillingStatus::Billable)
+                    ->selectRaw('domain_id, count(*) as total')->groupBy('domain_id')->pluck('total', 'domain_id')->all()
+                : [],
             'members' => $members->members($organisation),
             'assignableRoles' => OrganisationMemberService::assignableRoles(),
         ]);

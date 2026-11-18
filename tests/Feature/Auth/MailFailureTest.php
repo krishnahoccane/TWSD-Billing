@@ -69,6 +69,15 @@ class MailFailureTest extends TestCase
             ->assertSessionHas('error', fn (string $m) => str_contains($m, 'smtp-relay.example.test:587 could not be reached'));
     }
 
+    public function test_intercepted_smtp_connection_is_explained(): void
+    {
+        $this->failingSmtp("Unable to connect with STARTTLS: stream_socket_enable_crypto(): Peer certificate subjectAltName did not match expected name `smtp-relay.example.test'");
+
+        $this->artisan('wcc:mail-test', ['to' => 'someone@example.test'])
+            ->expectsOutputToContain('intercepted the connection to smtp-relay.example.test:587')
+            ->assertExitCode(1);
+    }
+
     public function test_guest_forgot_password_gets_a_generic_message_without_server_details(): void
     {
         $this->failingSmtp('Connection could not be established with host "smtp-relay.example.test:587"');

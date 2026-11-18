@@ -22,6 +22,9 @@ class MailFailure
             Str::contains($raw, ['Connection could not be established', 'Connection refused', 'timed out', 'Network is unreachable', 'getaddrinfo'], true) => "The mail server {$host}:{$port} could not be reached. Many shared hosts block outgoing SMTP — ask your host to allow it, or try port 2525 or 465 (smtps).",
             Str::contains($raw, ['535', 'Authentication', 'authenticate', 'Username and Password not accepted'], true) => 'The mail server rejected the SMTP username or password. For Brevo, the password is an SMTP key (Settings → SMTP & API), not your login password or API key.',
             Str::contains($raw, ['sender', 'Sender', '550', '553', '554'], true) => "The mail server refused the message from {$from}. Make sure this sender address or its domain is verified with your mail provider.",
+            // cPanel/WHM "SMTP Restrictions" (or CSF SMTP_BLOCK) silently redirects outgoing SMTP to the
+            // host's own mail server, which then presents its own certificate.
+            Str::contains($raw, ['did not match expected name', 'subjectAltName'], true) => "Your hosting server intercepted the connection to {$host}:{$port} (its own mail server answered instead). Use port 2525, or ask your host to disable SMTP Restrictions for this account. Do not turn off certificate checks — that would send your SMTP key to the wrong server.",
             Str::contains($raw, ['certificate', 'SSL', 'TLS', 'crypto'], true) => 'The secure (TLS) connection to the mail server failed. Port 587 uses MAIL_SCHEME=smtp; port 465 uses MAIL_SCHEME=smtps.',
             default => 'The e-mail could not be sent.',
         };

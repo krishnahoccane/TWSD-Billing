@@ -4,6 +4,7 @@ namespace App\Modules\GoogleWorkspace\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\AccessControl\Enums\Ability;
+use App\Modules\Billing\Models\AccountBillingPeriod;
 use App\Modules\GoogleWorkspace\Enums\AccountStatus;
 use App\Modules\GoogleWorkspace\Http\Requests\StoreAccountRequest;
 use App\Modules\GoogleWorkspace\Http\Requests\UpdateAccountRequest;
@@ -14,6 +15,7 @@ use App\Modules\GoogleWorkspace\Services\GoogleAccountService;
 use App\Modules\GoogleWorkspace\Services\InitialPasswordVault;
 use App\Modules\Organisations\Models\Organisation;
 use App\Modules\Organisations\Services\OrganisationContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -181,6 +183,34 @@ class AccountController extends Controller
             .($transfer ? ' It is billed to the new organisation from today.' : ''));
     }
 
+    public function changeBillingStart(Request $request, GoogleAccount $account, GoogleAccountService $accounts): RedirectResponse
+    {
+        Gate::authorize('changeBillingStart', $account);
+
+        $data = $request->validateWithBag('billing', [
+            'billable_from' => ['required', 'date_format:Y-m-d'],
+            'reason' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+
+        $timezone = config('wcc.billing.timezone');
+        $date = CarbonImmutable::createFromFormat('!Y-m-d', $data['billable_from'], $timezone);
+        $previous = $accounts->changeBillingStart($account, $date, $data['reason'], $request->user());
+
+        // Completed months whose invoice is affected (billing is in arrears).
+        $months = [];
+        $currentMonth = CarbonImmutable::now($timezone)->startOfMonth();
+
+        $earliest = CarbonImmutable::createFromFormat('!Y-m-d', min($date->toDateString(), $previous->toDateString()), $timezone);
+
+        for ($month = $earliest->startOfMonth(); $month->lt($currentMonth); $month = $month->addMonth()) {
+            $months[] = $month->format('F Y');
+        }
+
+        return back()->with('success', "{$account->primary_email} is now billed from ".$date->format('d M Y')
+            .' (was '.$previous->format('d M Y').').'
+            .($months === [] ? '' : ' Re-run billing or recalculate the draft invoice for: '.implode(', ', $months).'.'));
+    }
+
     public function requestPermanentDeletion(Request $request, GoogleAccount $account, GoogleAccountService $accounts): RedirectResponse
     {
         Gate::authorize('requestPermanentDeletion', $account);
@@ -233,6 +263,9 @@ class AccountController extends Controller
             'deletionRequest' => $accounts->openDeletionRequest($account)?->load('requester:id,name,email'),
             'canReveal' => $password === null && $vault->isAvailableTo($account, $request->user()),
             'initialPassword' => $password,
+            // What invoices are actually calculated from (the open billing period), not the display field.
+            'billingStart' => AccountBillingPeriod::query()->where('google_account_id', $account->getKey())
+                ->where('organisation_id', $account->organisation_id)->whereNull('ends_on')->value('starts_on'),
             // Organisations the mailbox can be assigned or moved to (not its current one).
             'assignable' => $request->user()->can('reassign', $account) && $account->account_status !== AccountStatus::PermanentlyDeleted
                 ? Organisation::query()->visibleTo($request->user(), Ability::AccountsReassignOrganisation)

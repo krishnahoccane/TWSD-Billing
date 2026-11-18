@@ -16,7 +16,10 @@
         'decidePermanent' => $deletionRequest?->status === 'pending' && $user->can('approvePermanentDeletion', $account),
         // Move an already-assigned mailbox to another organisation.
         'reassign' => $idle && ! $account->isUnassigned() && $assignable !== [],
+        'billingStart' => $idle && $billingStart !== null && $user->can('changeBillingStart', $account),
     ];
+
+    $billedFrom = $billingStart !== null ? \Carbon\CarbonImmutable::parse(substr((string) $billingStart, 0, 10)) : null;
 
     $details = [
         'Name' => $account->fullName(),
@@ -25,7 +28,7 @@
         'Organisational unit' => $account->organisational_unit_path,
         'Recovery email' => $account->recovery_email,
         'Recovery phone' => $account->recovery_phone,
-        'Billing' => $account->billing_status->label().($account->billable_from ? ' from '.$account->billable_from->format('d M Y') : ''),
+        'Billing' => $account->billing_status->label().(($billedFrom ?? $account->billable_from) ? ' from '.($billedFrom ?? $account->billable_from)->format('d M Y') : ''),
         'Billing stops' => $account->deletion_effective_date?->format('d M Y'),
         'Created in Google' => $account->google_created_at?->format('d M Y H:i'),
         'Last synced' => $account->last_synced_at?->diffForHumans(),
@@ -150,9 +153,16 @@
                     </div>
                 @endforeach
             </dl>
-            @if ($can['requestPermanent'])
+            @if ($can['requestPermanent'] || $can['billingStart'])
                 <x-slot:footer>
-                    <x-ui.button variant="ghost" size="sm" @click="$dispatch('open-modal', 'request-permanent')">Request permanent deletion…</x-ui.button>
+                    <div class="flex flex-wrap gap-2">
+                        @if ($can['billingStart'])
+                            <x-ui.button variant="ghost" size="sm" icon="calendar" @click="$dispatch('open-modal', 'billing-start')">Change billing start…</x-ui.button>
+                        @endif
+                        @if ($can['requestPermanent'])
+                            <x-ui.button variant="ghost" size="sm" @click="$dispatch('open-modal', 'request-permanent')">Request permanent deletion…</x-ui.button>
+                        @endif
+                    </div>
                 </x-slot:footer>
             @endif
         </x-ui.card>
@@ -209,6 +219,28 @@
                 <div class="flex justify-end gap-2">
                     <x-ui.button variant="secondary" @click="$dispatch('close-modal', 'reassign')">Cancel</x-ui.button>
                     <x-ui.button type="submit">Move mailbox</x-ui.button>
+                </div>
+            </form>
+        </x-ui.modal>
+    @endif
+    @if ($can['billingStart'])
+        <x-ui.modal name="billing-start" title="Change the billing start date?">
+            <form method="POST" action="{{ route('accounts.billing-start', $account) }}" class="space-y-4">
+                @csrf
+                <div class="space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+                    <p>{{ $account->primary_email }} is billed to <span class="font-medium">{{ $account->organisation->name }}</span> from {{ $billedFrom->format('d M Y') }}.</p>
+                    <p>Invoices already issued are never changed. Afterwards, re-run billing or recalculate the draft invoice for the months affected.</p>
+                </div>
+                <x-ui.form.field label="Billed from" for="billable_from" name="billable_from" bag="billing" required>
+                    <x-ui.form.input type="date" name="billable_from" id="billable_from" bag="billing" required
+                                     :value="old('billable_from', $billedFrom->toDateString())" max="{{ now(config('wcc.billing.timezone'))->toDateString() }}" />
+                </x-ui.form.field>
+                <x-ui.form.field label="Reason" for="billing_reason" name="reason" bag="billing" required>
+                    <x-ui.form.textarea name="reason" id="billing_reason" bag="billing" required minlength="3" maxlength="500" />
+                </x-ui.form.field>
+                <div class="flex justify-end gap-2">
+                    <x-ui.button variant="secondary" @click="$dispatch('close-modal', 'billing-start')">Cancel</x-ui.button>
+                    <x-ui.button type="submit">Save billing start</x-ui.button>
                 </div>
             </form>
         </x-ui.modal>
@@ -302,6 +334,9 @@
 
     @if ($can['reassign'] && $errors->getBag('reassign')->any())
         <div x-data x-init="$nextTick(() => $dispatch('open-modal', 'reassign'))"></div>
+    @endif
+    @if ($can['billingStart'] && $errors->getBag('billing')->any())
+        <div x-data x-init="$nextTick(() => $dispatch('open-modal', 'billing-start'))"></div>
     @endif
     @if ($errors->getBag('permanent')->any())
         <div x-data x-init="$nextTick(() => $dispatch('open-modal', 'request-permanent'))"></div>

@@ -12,6 +12,8 @@ use App\Modules\Domains\Models\GoogleDomain;
 use App\Modules\Domains\Models\OrganisationDomain;
 use App\Modules\Domains\Services\DomainMappingService;
 use App\Modules\Domains\Services\DomainRequestService;
+use App\Modules\GoogleWorkspace\Enums\AccountStatus;
+use App\Modules\GoogleWorkspace\Models\GoogleAccount;
 use App\Modules\GoogleWorkspace\Models\GoogleSyncLog;
 use App\Modules\GoogleWorkspace\Services\GoogleDirectoryImporter;
 use App\Modules\GoogleWorkspace\Services\GoogleIntegrationStatus;
@@ -122,9 +124,22 @@ class DomainController extends Controller
     {
         Gate::authorize('viewDomains', $domain->organisation);
 
+        $user = $request->user();
+        $canViewAccounts = $user->hasAbility(Ability::AccountsView, $domain->organisation);
+
         return view('domains.show', [
             'domain' => $domain->load('organisation:id,uuid,name'),
             'accounts' => $requests->accountsOn($domain->domain_name),
+            // Mailboxes on this domain that the user may see (their own organisation's, or all for a Super Admin).
+            'mailboxes' => $canViewAccounts
+                ? GoogleAccount::query()
+                    ->visibleTo($user, Ability::AccountsView)
+                    ->where('primary_email', 'like', '%@'.addcslashes($domain->domain_name, '%_\\'))
+                    ->where('account_status', '!=', AccountStatus::PermanentlyDeleted->value)
+                    ->with('organisation:id,uuid,name')
+                    ->orderBy('primary_email')
+                    ->paginate(50)
+                : null,
             'openRequest' => $requests->openRequestFor($domain->domain_name),
             'history' => DomainHistory::query()->where('domain_name', $domain->domain_name)
                 ->where('organisation_id', $domain->organisation_id)->with('user:id,name')->latest('id')->limit(50)->get(),

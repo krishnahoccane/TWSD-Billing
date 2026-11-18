@@ -74,6 +74,12 @@ class GoogleAccountPolicy
         return $this->allows($user, Ability::AccountsReassignOrganisation, $account);
     }
 
+    /** Correcting the date a mailbox is billed from changes what the organisation is charged. */
+    public function changeBillingStart(User $user, GoogleAccount $account): bool
+    {
+        return $account->organisation_id !== null && $this->allows($user, Ability::PricingManage, $account);
+    }
+
     private function allows(User $user, Ability $ability, GoogleAccount $account): bool
     {
         if ($account->organisation_id === null) {

@@ -458,7 +458,24 @@ made Alpine transitions look broken during the check; they work when the pane is
   why (`Notifications/Support/MailFailure`: unreachable server / rejected credentials / unverified sender / TLS);
   guests get a generic message without server details. SMTP timeout 20 s (`MAIL_TIMEOUT`).
 - `php artisan wcc:mail-test you@example.com` sends one test e-mail and prints the mail server's answer.
-- Tests: `GoogleWorkspace/AccountReassignTest` (4, including tenancy), `Auth/MailFailureTest` (5).
+- Tests: `GoogleWorkspace/AccountReassignTest` (4, including tenancy), `Auth/MailFailureTest` (6, including a
+  host that intercepts SMTP and answers with its own certificate).
+
+## Billing start, organisation and domain pages (2026-11-18)
+
+- Invoices are calculated from `account_billing_periods`, not from `google_accounts.billable_from` (a display
+  field). Editing `billable_from` in the database therefore changes nothing on an invoice.
+- **Change billing start** on a mailbox (`pricing.manage` in its organisation; Super Admin by default):
+  `POST /accounts/{account}/billing-start` with a date and a reason → `GoogleAccountService::changeBillingStart` →
+  `BillingPeriodTracker::moveStart`. It moves the open period's `starts_on` and keeps `billable_from` in step, and is
+  audited (`account.billing_start_changed`) and recorded in the history. Refused when the date is in the future,
+  is before the mailbox was created in Google, overlaps an earlier period of the mailbox (another organisation),
+  or when an issued invoice covers any day between the old and new date. The flash message names the completed
+  months to re-run or recalculate. A skipped cycle ("Nothing to bill") is re-run from Billing cycles.
+- Organisation page: "Billable email accounts" count and billable accounts per domain (for users with
+  `accounts.view` there); domain names link to the domain page.
+- Domain page: list of mailboxes on the domain (scoped by `accounts.view`), linking to each mailbox.
+- Tests: `Billing/BillingStartTest` (5, including tenancy).
 
 ## Project status
 

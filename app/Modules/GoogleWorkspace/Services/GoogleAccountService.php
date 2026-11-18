@@ -353,6 +353,40 @@ class GoogleAccountService
         });
     }
 
+    /**
+     * Correct the day this mailbox is billed from in its current organisation
+     * (for example a mailbox that existed before it was assigned here).
+     * Moves the open billing period, which is what invoices are calculated
+     * from, and keeps billable_from in step. Draft invoices must then be
+     * recalculated (or the month re-run); issued invoices are protected.
+     *
+     * @return CarbonImmutable the previous start date
+     *
+     * @throws ValidationException
+     */
+    public function changeBillingStart(GoogleAccount $account, CarbonImmutable $date, string $reason, User $actor): CarbonImmutable
+    {
+        if ($account->pending_operation !== null) {
+            throw ValidationException::withMessages(['billable_from' => 'A Google Workspace change is still being applied to this mailbox. Try again when it has finished.'])->errorBag('billing');
+        }
+
+        return DB::transaction(function () use ($account, $date, $reason, $actor) {
+            $previous = app(BillingPeriodTracker::class)->moveStart($account, $date);
+
+            $account->forceFill(['billable_from' => $date->toDateString(), 'updated_by' => $actor->getKey()])->save();
+
+            $details = ['from' => $previous->toDateString(), 'to' => $date->toDateString(), 'reason' => $reason];
+
+            $this->history->record($account, 'billing_start_changed', details: $details, actor: $actor);
+            $this->audit->record('account.billing_start_changed', $account,
+                previous: ['billable_from' => $previous->toDateString()],
+                new: ['billable_from' => $date->toDateString(), 'reason' => $reason],
+                organisation: $account->organisation, actor: $actor);
+
+            return $previous;
+        });
+    }
+
     public function openDeletionRequest(GoogleAccount $account): ?AccountDeletionRequest
     {
         return AccountDeletionRequest::query()

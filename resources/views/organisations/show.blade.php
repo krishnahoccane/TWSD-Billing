@@ -61,7 +61,10 @@
         </x-ui.alert>
     @endif
 
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div @class(['grid grid-cols-1 gap-4 sm:grid-cols-2', 'lg:grid-cols-4' => $billableAccounts !== null, 'lg:grid-cols-3' => $billableAccounts === null])>
+        @if ($billableAccounts !== null)
+            <x-ui.stat-card label="Billable email accounts" :value="number_format($billableAccounts)" icon="mail" />
+        @endif
         <x-ui.stat-card label="Users with access" :value="$members->pluck('user_id')->unique()->count()" icon="users" />
         <x-ui.stat-card label="Domains" :value="$organisation->domains->count()" icon="globe" />
         <x-ui.stat-card label="Contacts" :value="$organisation->contacts->count()" icon="user" />
@@ -145,11 +148,14 @@
                     @else
                         <div class="overflow-x-auto">
                             <table class="data-table">
-                                <thead><tr><th>Domain</th><th>Type</th><th>Verification</th><th>Added</th></tr></thead>
+                                <thead><tr><th>Domain</th>@if ($billableAccounts !== null)<th>Billable accounts</th>@endif<th>Type</th><th>Verification</th><th>Added</th></tr></thead>
                                 <tbody>
                                     @foreach ($organisation->domains as $domain)
                                         <tr>
-                                            <td class="font-medium">{{ $domain->domain_name }}</td>
+                                            <td><a href="{{ route('domains.show', $domain) }}" class="font-medium hover:underline">{{ $domain->domain_name }}</a></td>
+                                            @if ($billableAccounts !== null)
+                                                <td>{{ number_format($billableByDomain[$domain->id] ?? 0) }}</td>
+                                            @endif
                                             <td>{{ $domain->domain_type->label() }}</td>
                                             <td>
                                                 <x-ui.badge :tone="$domain->verification_status === 'verified' ? 'success' : 'neutral'">

@@ -80,6 +80,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/accounts/{account}/retry', [AccountController::class, 'retry'])->name('accounts.retry');
         Route::post('/accounts/{account}/reveal-password', [AccountController::class, 'reveal'])->middleware('throttle:10,1')->name('accounts.reveal');
         Route::post('/accounts/{account}/assign', [AccountController::class, 'assign'])->name('accounts.assign');
+        Route::post('/accounts/{account}/billing-start', [AccountController::class, 'changeBillingStart'])->name('accounts.billing-start');
         Route::post('/accounts/{account}/deletion-requests', [AccountController::class, 'requestPermanentDeletion'])->name('accounts.deletion-requests.store');
         Route::post('/accounts/{account}/deletion-requests/{deletionRequest}/approve', [AccountController::class, 'approvePermanentDeletion'])->name('accounts.deletion-requests.approve');
         Route::post('/accounts/{account}/deletion-requests/{deletionRequest}/reject', [AccountController::class, 'rejectPermanentDeletion'])->name('accounts.deletion-requests.reject');

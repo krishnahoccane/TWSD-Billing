@@ -25,6 +25,38 @@
         <x-ui.stat-card label="Google verification" :value="ucfirst(str_replace('_', ' ', $domain->verification_status))" icon="shield-check" />
     </div>
 
+    @if ($mailboxes !== null)
+        <x-ui.card title="Mailboxes" :padding="false" class="mt-6"
+                   :description="'Email accounts on '.$domain->domain_name.'.'">
+            @if ($mailboxes->isEmpty())
+                <x-ui.empty-state title="No mailboxes on this domain" icon="mail" />
+            @else
+                <div class="overflow-x-auto">
+                    <table class="data-table">
+                        <thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Billing</th><th>Organisation</th></tr></thead>
+                        <tbody>
+                            @foreach ($mailboxes as $mailbox)
+                                <tr>
+                                    <td><a href="{{ route('accounts.show', $mailbox) }}" class="font-medium hover:underline">{{ $mailbox->primary_email }}</a></td>
+                                    <td>{{ $mailbox->fullName() ?: '—' }}</td>
+                                    <td><x-ui.badge :tone="$mailbox->account_status->tone()">{{ $mailbox->account_status->label() }}</x-ui.badge></td>
+                                    <td class="whitespace-nowrap">
+                                        {{ $mailbox->billing_status->label() }}
+                                        @if ($mailbox->billable_from)<div class="muted text-xs">from {{ $mailbox->billable_from->format('d M Y') }}</div>@endif
+                                    </td>
+                                    <td class="muted">{{ $mailbox->organisation?->name ?? 'Not assigned' }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                @if ($mailboxes->hasPages())
+                    <div class="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">{{ $mailboxes->links() }}</div>
+                @endif
+            @endif
+        </x-ui.card>
+    @endif
+
     <x-ui.card title="Activity" :padding="false" class="mt-6">
         @if ($history->isEmpty())
             <x-ui.empty-state title="No recorded activity" icon="history"
