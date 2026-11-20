@@ -6,6 +6,9 @@ use App\Modules\Authentication\Http\Controllers\Api\V1\ProfileController;
 use App\Modules\Billing\Http\Controllers\Api\V1\BillingApiController;
 use App\Modules\Domains\Http\Controllers\Api\V1\DomainController;
 use App\Modules\GoogleWorkspace\Http\Controllers\Api\V1\AccountController;
+use App\Modules\Licensing\Http\Controllers\Storefront\StorefrontApiController;
+use App\Modules\Licensing\Http\Middleware\AuthenticateStorefront;
+use App\Modules\Licensing\Http\Middleware\StorefrontIdempotency;
 use App\Modules\Organisations\Http\Controllers\Api\V1\OrganisationController;
 use App\Modules\Zoho\Http\Controllers\Api\V1\ZohoApiController;
 use App\Modules\Zoho\Http\Controllers\ZohoIntegrationController;
@@ -70,4 +73,34 @@ Route::middleware(['auth:sanctum', 'active', 'two-factor.enrolled'])->group(func
     Route::post('/integrations/google/test', [AccountController::class, 'testGoogle'])->name('api.v1.integrations.google.test');
     Route::post('/integrations/zoho/test', [ZohoApiController::class, 'test'])->name('api.v1.integrations.zoho.test');
     Route::post('/integrations/zoho/sync', [ZohoApiController::class, 'sync'])->name('api.v1.integrations.zoho.sync');
+});
+
+/*
+| Storefront API (musicdesk.tech): server-to-server, "Authorization: Bearer
+| sk_live_…". Error envelope { error: { code, message, field } }.
+| See docs/LICENSING.md.
+*/
+Route::prefix('storefront')->middleware([AuthenticateStorefront::class, 'throttle:storefront'])->group(function () {
+    Route::get('/catalog/{product}', [StorefrontApiController::class, 'catalog'])->name('api.storefront.catalog');
+    Route::get('/products/{product}/releases', [StorefrontApiController::class, 'releases'])->name('api.storefront.releases');
+
+    Route::post('/customers', [StorefrontApiController::class, 'storeCustomer'])->middleware(StorefrontIdempotency::class)->name('api.storefront.customers.store');
+    Route::get('/customers/{customer}', [StorefrontApiController::class, 'customer'])->name('api.storefront.customers.show');
+    Route::patch('/customers/{customer}', [StorefrontApiController::class, 'updateCustomer'])->name('api.storefront.customers.update');
+
+    Route::post('/orders', [StorefrontApiController::class, 'storeOrder'])->middleware(StorefrontIdempotency::class)->name('api.storefront.orders.store');
+    Route::post('/orders/{order}/confirm-payment', [StorefrontApiController::class, 'confirmPayment'])->name('api.storefront.orders.confirm-payment');
+    Route::post('/orders/{order}/refund', [StorefrontApiController::class, 'refundOrder'])->name('api.storefront.orders.refund');
+
+    Route::get('/licenses', [StorefrontApiController::class, 'licenses'])->name('api.storefront.licenses.index');
+    Route::get('/licenses/{license}', [StorefrontApiController::class, 'license'])->name('api.storefront.licenses.show');
+    Route::patch('/licenses/{license}', [StorefrontApiController::class, 'updateLicense'])->name('api.storefront.licenses.update');
+    Route::post('/licenses/{license}/reveal-key', [StorefrontApiController::class, 'revealKey'])->name('api.storefront.licenses.reveal-key');
+    Route::get('/licenses/{license}/events', [StorefrontApiController::class, 'events'])->name('api.storefront.licenses.events');
+    Route::post('/licenses/{license}/downloads', [StorefrontApiController::class, 'download'])->name('api.storefront.licenses.downloads');
+    Route::get('/licenses/{license}/activations', [StorefrontApiController::class, 'activations'])->name('api.storefront.activations.index');
+    Route::post('/licenses/{license}/activations', [StorefrontApiController::class, 'addActivation'])->middleware(StorefrontIdempotency::class)->name('api.storefront.activations.store');
+    Route::post('/licenses/{license}/activations/{activation}/move', [StorefrontApiController::class, 'moveActivation'])->middleware(StorefrontIdempotency::class)->name('api.storefront.activations.move');
+    Route::delete('/licenses/{license}/activations/{activation}', [StorefrontApiController::class, 'deactivateActivation'])->name('api.storefront.activations.destroy');
+    Route::post('/licenses/{license}/activations/{activation}/check-in-request', [StorefrontApiController::class, 'requestCheckIn'])->name('api.storefront.activations.check-in');
 });

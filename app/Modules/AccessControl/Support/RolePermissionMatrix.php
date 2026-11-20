@@ -64,6 +64,7 @@ final class RolePermissionMatrix
                 Ability::PaymentsView,
                 Ability::PaymentsInitiate,
                 Ability::SupportCreate,
+                Ability::LicensingView,
             ],
 
             RoleName::BillingManager => [
@@ -76,6 +77,7 @@ final class RolePermissionMatrix
                 Ability::PaymentsView,
                 Ability::PaymentsInitiate,
                 Ability::SupportCreate,
+                Ability::LicensingView,
             ],
         };
     }

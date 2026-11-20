@@ -78,6 +78,12 @@ return [
         'default_country_code' => env('WHATSAPP_DEFAULT_COUNTRY_CODE', '91'),
     ],
 
+    'licensing' => [
+        // Largest release package that can be uploaded (also raise PHP's
+        // upload_max_filesize / post_max_size on the server to match).
+        'max_package_mb' => (int) env('LICENSING_MAX_PACKAGE_MB', 200),
+    ],
+
     'billing' => [
         'currency' => env('BILLING_CURRENCY', 'INR'),
         'timezone' => env('BILLING_TIMEZONE', 'Asia/Kolkata'),

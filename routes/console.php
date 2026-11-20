@@ -7,6 +7,7 @@ use App\Modules\GoogleWorkspace\Jobs\ImportGoogleDomainsJob;
 use App\Modules\GoogleWorkspace\Jobs\ImportGoogleUsersJob;
 use App\Modules\GoogleWorkspace\Jobs\ReconcileGoogleAccountsJob;
 use App\Modules\GoogleWorkspace\Jobs\SyncGoogleAccountsJob;
+use App\Modules\Licensing\Jobs\SendLicenseExpiryEventsJob;
 use App\Modules\System\Http\Controllers\SystemController;
 use App\Modules\Zoho\Jobs\ReconcileZohoPaymentJob;
 use Illuminate\Support\Facades\Cache;
@@ -45,6 +46,9 @@ Schedule::job(new SendPaymentRemindersJob)->dailyAt('09:00')->timezone(config('w
 // days after the due date have passed; reactivate them once paid. Hourly
 // (payments also trigger it straight away).
 Schedule::job(new EnforcePaymentSuspensionsJob)->hourlyAt(5)->withoutOverlapping();
+
+// Software licensing: license.expiring (30/14/3 days) and license.expired webhooks to the storefront.
+Schedule::job(new SendLicenseExpiryEventsJob)->dailyAt('08:00')->timezone(config('wcc.billing.timezone'))->withoutOverlapping();
 
 // Heartbeat shown on System → Health, so a missing cron entry is noticed.
 Schedule::call(fn () => Cache::put(SystemController::HEARTBEAT_KEY, now()->toIso8601String(), 3600))->everyMinute()->name('scheduler-heartbeat');

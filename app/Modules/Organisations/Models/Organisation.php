@@ -30,6 +30,7 @@ class Organisation extends Model
 
     protected $attributes = [
         'status' => 'active',
+        'currency' => null,
         'country' => 'IN',
     ];
 

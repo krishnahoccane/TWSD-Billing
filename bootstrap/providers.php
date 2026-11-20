@@ -5,6 +5,7 @@ use App\Modules\Billing\BillingServiceProvider;
 use App\Modules\Domains\DomainsServiceProvider;
 use App\Modules\GoogleWorkspace\GoogleWorkspaceServiceProvider;
 use App\Modules\Installer\InstallerServiceProvider;
+use App\Modules\Licensing\LicensingServiceProvider;
 use App\Modules\Organisations\OrganisationsServiceProvider;
 use App\Modules\WhatsApp\WhatsAppServiceProvider;
 use App\Modules\Zoho\ZohoServiceProvider;
@@ -22,4 +23,5 @@ return [
     BillingServiceProvider::class,
     ZohoServiceProvider::class,
     WhatsAppServiceProvider::class,
+    LicensingServiceProvider::class,
 ];

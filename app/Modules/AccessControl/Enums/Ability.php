@@ -72,6 +72,11 @@ enum Ability: string
     case IntegrationsManageGoogle = 'integrations.google.manage';
     case IntegrationsManageZoho = 'integrations.zoho.manage';
     case IntegrationsManageWhatsApp = 'integrations.whatsapp.manage';
+
+    // Software licensing (LabelDesk)
+    case LicensingView = 'licensing.view';
+    case LicensingManage = 'licensing.manage';
+    case LicensingStorefrontsManage = 'licensing.storefronts.manage';
     case IntegrationsViewLogs = 'integrations.logs.view';
 
     // Audit & support
@@ -118,6 +123,8 @@ enum Ability: string
             self::IntegrationsManageZoho,
             self::IntegrationsManageWhatsApp,
             self::AccountsReactivatePaymentSuspended,
+            self::LicensingManage,
+            self::LicensingStorefrontsManage,
         ], true);
     }
 
@@ -148,6 +155,7 @@ enum Ability: string
             self::IntegrationsManageGoogle,
             self::IntegrationsManageZoho,
             self::IntegrationsManageWhatsApp,
+            self::LicensingStorefrontsManage,
             self::IntegrationsViewLogs,
             self::AuditViewTechnical,
             self::BillingRunCycles,

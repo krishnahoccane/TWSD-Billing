@@ -80,6 +80,9 @@ Holders of any platform role are "privileged" and must use TOTP two-factor authe
 | `integrations.google.manage` **S** | ● | ○ | ○ | ○ |
 | `integrations.zoho.manage` **S** | ● | ○ | ○ | ○ |
 | `integrations.whatsapp.manage` **S** | ● | ○ | ○ | ○ |
+| `licensing.view` | ● | ○ | ● | ● |
+| `licensing.manage` **S** | ● | ○ | ○ | ○ |
+| `licensing.storefronts.manage` **S** | ● | ○ | ○ | ○ |
 | `integrations.logs.view` | ● | ● | ○ | ○ |
 | `audit.view` | ● | ○ | ○ | ○ |
 | `audit.view_technical` | ● | ● | ○ | ○ |

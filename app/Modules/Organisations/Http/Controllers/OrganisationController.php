@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\AccessControl\Enums\Ability;
 use App\Modules\GoogleWorkspace\Enums\BillingStatus;
 use App\Modules\GoogleWorkspace\Models\GoogleAccount;
+use App\Modules\Licensing\Models\SoftwareLicense;
 use App\Modules\Organisations\Enums\OrganisationStatus;
 use App\Modules\Organisations\Http\Requests\ChangeOrganisationStatusRequest;
 use App\Modules\Organisations\Http\Requests\OrganisationRequest;
@@ -55,6 +56,10 @@ class OrganisationController extends Controller
 
         return view('organisations.show', [
             'organisation' => $organisation,
+            // Software licenses (LabelDesk), for those who may see them in this organisation.
+            'licenses' => auth()->user()->hasAbility(Ability::LicensingView, $organisation)
+                ? SoftwareLicense::query()->where('organisation_id', $organisation->getKey())->with(['plan:id,name', 'product:id,name,key_prefix'])->orderByDesc('id')->limit(20)->get()
+                : null,
             // Billable mailboxes (what this organisation is charged for), shown to those who may see its accounts.
             'billableAccounts' => $canViewAccounts
                 ? GoogleAccount::query()->where('organisation_id', $organisation->getKey())

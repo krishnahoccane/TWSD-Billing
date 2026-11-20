@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureTwoFactorEnrolled;
 use App\Http\Middleware\SecurityHeaders;
 use App\Modules\Installer\Http\Middleware\InstallationGate;
+use App\Modules\Licensing\Support\ApiErrors;
 use App\Modules\Notifications\Support\MailFailure;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -41,6 +42,9 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
 
+        // Storefront and license-server APIs: { "error": { code, message, field } }.
+        $exceptions->render(fn (Throwable $e, Request $request) => ApiErrors::render($e, $request));
+
         // E-mail that could not be sent (SMTP refused, wrong credentials, port
         // blocked by the host...) is reported in the log and shown on the page
         // with the server's reason, instead of a bare 500.
@@ -62,7 +66,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Consistent API error envelope: { message, errors?, request_id }.
         $exceptions->respond(function ($response, Throwable $e, Request $request) {
-            if (! $request->is('api/*') || ! $response instanceof JsonResponse) {
+            if (! $request->is('api/*') || ! $response instanceof JsonResponse || ApiErrors::applies($request)) {
                 return $response;
             }
 
