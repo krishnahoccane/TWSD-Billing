@@ -24,13 +24,13 @@ class OrganisationService
     /**
      * @param  array<string, mixed>  $data  validated input
      */
-    public function create(array $data, ?User $actor): Organisation
+    public function create(array $data, User $actor): Organisation
     {
         return DB::transaction(function () use ($data, $actor) {
             $organisation = new Organisation($this->normalise($data));
             $organisation->status = OrganisationStatus::Active;
-            $organisation->created_by = $actor?->getKey();   // null: created by a storefront
-            $organisation->updated_by = $actor?->getKey();
+            $organisation->created_by = $actor->getKey();
+            $organisation->updated_by = $actor->getKey();
             $organisation->save();
 
             $this->audit->record(

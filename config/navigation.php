@@ -56,12 +56,6 @@ return [
             ['label' => 'Payments', 'icon' => 'credit-card', 'route' => 'payments.index', 'ability' => Ability::PaymentsView],
             ['label' => 'Outstanding Payments', 'icon' => 'triangle-alert', 'route' => 'payments.outstanding', 'ability' => Ability::PaymentsView],
         ]],
-        ['heading' => 'Software Licensing', 'items' => [
-            ['label' => 'Licenses', 'icon' => 'key-round', 'route' => 'licensing.index', 'ability' => Ability::LicensingView],
-            ['label' => 'Add License', 'icon' => 'plus', 'route' => 'licensing.create', 'ability' => Ability::LicensingManage],
-            ['label' => 'Products & Plans', 'icon' => 'package', 'route' => 'licensing.products', 'ability' => Ability::LicensingManage],
-            ['label' => 'Storefronts', 'icon' => 'store', 'route' => 'licensing.storefronts', 'ability' => Ability::LicensingStorefrontsManage],
-        ]],
         ['heading' => 'Integrations', 'items' => [
             ['label' => 'Google Workspace', 'icon' => 'plug', 'route' => 'integrations.google', 'ability' => Ability::IntegrationsManageGoogle],
             ['label' => 'Zoho Books', 'icon' => 'book-open', 'route' => 'integrations.zoho', 'ability' => Ability::IntegrationsManageZoho],

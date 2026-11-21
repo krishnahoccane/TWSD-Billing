@@ -553,30 +553,11 @@ made Alpine transitions look broken during the check; they work when the pane is
 - `GOOGLE_SERVICE_ACCOUNT_JSON`: a relative path is resolved from the application folder, so web requests (cwd
   `public/`) and the queue worker (cwd = application folder) read the same file. Use an absolute path.
 
-## Software licensing — LabelDesk / musicdesk.tech, phase 1 (2026-11-20)
+## Software licensing removed (2026-11-21)
 
-- Module `app/Modules/Licensing`, migration `2026_11_27_000001` (storefronts, products, plans, per-currency prices,
-  licenses, activations, license events, orders, releases, outgoing webhooks, idempotency keys; `organisations.currency`;
-  permissions `licensing.view/manage/storefronts.manage`). Full reference: `docs/LICENSING.md`.
-- Decisions from the owner: licensing core first; musicdesk.tech invoices and takes payment (Razorpay) and reports paid
-  orders here; per-customer currency; customers are organisations (D-31 … D-34).
-- Storefront API `/api/v1/storefront/*` (hashed `sk_live_` key, `X-Customer-Id` isolation, idempotency, spec error
-  envelope), license server `/api/license/v1/*` (Ed25519 JWT via libsodium), signed webhooks with retries, daily
-  expiry notices. Admin screens: Licenses, Add License, Products & Plans, Storefronts, organisation card.
-- `OrganisationService::create` accepts a null actor (organisations created by a storefront).
-- Tests: `Licensing/StorefrontApiTest` (8), `Licensing/LicensingAdminTest` (3).
-
-## Software licensing phase 2 — downloads and USD amounts (2026-11-20)
-
-- Driven by musicdesk.tech's integration doc v3.1 (§7.5, §7.6). Migration `2026_11_29_000001`.
-- `POST /orders` accepts `amount_usd` (stored `software_orders.amount_usd_minor`; USD orders fill it themselves);
-  returned on every order and shown on the admin license page.
-- Release packages: uploaded by Super Admins (stored on the private local disk, SHA-256 and size computed);
-  `POST /api/v1/storefront/licenses/{lic}/downloads` issues a single-use 15-minute link (`software_download_links`,
-  token hashed) when the release was published on or before the license's `support_until`; `GET /downloads/{token}`
-  streams it once. Licenses now return `latest_available_version`.
-- Open: who sends renewal reminder e-mails (D-35); package storage location (D-36).
-- Tests: `Licensing/DownloadsAndUsdTest` (4).
+- The MusicDesk / LabelDesk licensing module (storefront API, license server, admin screens) was removed at the
+  owner's request: licensing is handled inside the MusicDesk application. Migration `2026_11_30_000001` drops its
+  tables, permissions and `organisations.currency` on databases that had them (any licensing data there is deleted).
 
 ## Project status
 

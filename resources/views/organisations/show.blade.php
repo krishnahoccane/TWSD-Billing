@@ -172,24 +172,6 @@
                 </x-ui.card>
             @endif
 
-            @if ($licenses !== null && $licenses->isNotEmpty())
-                <x-ui.card title="Software licenses" id="licenses" :padding="false">
-                    <table class="data-table">
-                        <thead><tr><th>License</th><th>Product / plan</th><th>Status</th><th>Expires</th></tr></thead>
-                        <tbody>
-                            @foreach ($licenses as $license)
-                                <tr>
-                                    <td><a href="{{ route('licensing.show', $license) }}" class="font-medium hover:underline">{{ $license->number }}</a></td>
-                                    <td>{{ $license->product?->name }} · {{ $license->plan?->name }}</td>
-                                    <td><x-ui.badge :tone="$license->statusTone()">{{ ucfirst($license->displayStatus()) }}</x-ui.badge></td>
-                                    <td class="muted">{{ $license->expires_at?->inDisplayTimezone()->format('d M Y') ?? 'Lifetime' }}</td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </x-ui.card>
-            @endif
-
             {{-- Contacts --}}
             <x-ui.card title="Contacts" id="contacts" :padding="false">
                 @if ($contactTypes)
